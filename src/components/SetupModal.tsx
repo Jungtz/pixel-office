@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RoleType } from '../game/types';
 import { ROLE_CONFIGS } from '../services/roles';
 import { soundManager } from '../services/sound';
@@ -30,23 +30,62 @@ const ROLE_SHORT_CODES: Record<RoleType, string> = {
   BOSS: 'BO'
 };
 
+const STORAGE_KEY_COUNTS = 'roundtable-setup-counts';
+const STORAGE_KEY_PROVIDER = 'roundtable-setup-provider';
+
+const DEFAULT_COUNTS: Record<RoleType, number> = {
+  PM: 1,
+  RD: 2,
+  QA: 1,
+  UIUX: 1,
+  AD: 1,
+  INTERN: 1,
+  BOSS: 1
+};
+
+const loadSavedCounts = (): Record<RoleType, number> => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_COUNTS);
+    if (saved) return { ...DEFAULT_COUNTS, ...JSON.parse(saved) };
+  } catch { /* localStorage 損毀則回退預設值 */ }
+  return { ...DEFAULT_COUNTS };
+};
+
+const loadSavedProvider = (): string => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_PROVIDER);
+    if (saved) return saved;
+  } catch { /* ignore */ }
+  return 'mock';
+};
+
 export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
-  const [counts, setCounts] = useState<Record<RoleType, number>>({
-    PM: 1,
-    RD: 2,
-    QA: 1,
-    UIUX: 1,
-    AD: 1,
-    INTERN: 1,
-    BOSS: 1
-  });
+  const [counts, setCounts] = useState<Record<RoleType, number>>(loadSavedCounts);
 
   const providers = getProviderList();
-  const [selectedProviderId, setSelectedProviderId] = useState<string>('mock');
+  const [selectedProviderId, setSelectedProviderId] = useState<string>(loadSavedProvider);
   const [apiKey, setApiKey] = useState<string>('');
   const [baseUrl, setBaseUrl] = useState<string>('');
   const [model, setModel] = useState<string>('');
   const [sdk, setSdk] = useState<string>('');
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_COUNTS, JSON.stringify(counts));
+  }, [counts]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_PROVIDER, selectedProviderId);
+  }, [selectedProviderId]);
+
+  useEffect(() => {
+    const provDef = getProviderById(selectedProviderId);
+    if (provDef) {
+      setApiKey(provDef.apiKey);
+      setBaseUrl(provDef.baseURL);
+      setModel(selectedProviderId === 'agnes-ai' ? resolveModel() : provDef.defaultModel);
+      setSdk(provDef.sdk);
+    }
+  }, [selectedProviderId]);
 
   if (!isOpen) return null;
 
