@@ -12,7 +12,11 @@
       "chance": 0.4
     },
     "autoAdvanceMs": 3000,
-    "maxDialogueRounds": 20
+    "maxDialogueRounds": 20,
+    "eventFrequency": {
+      "minIntervalMs": 30000,
+      "maxIntervalMs": 60000
+    }
   },
   "models": {
     "label": "Ollama",

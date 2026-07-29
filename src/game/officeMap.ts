@@ -96,7 +96,13 @@ export function createDefaultMap(): TileInfo[][] {
         walkable = false;
         label = 'CEO Desk';
       }
-      // 8. 員工辦公桌點位
+      // 8. 盆栽裝飾
+      else if ((x === 2 && y === 12) || (x === 22 && y === 2) || (x === 13 && y === 1) || (x === 1 && y === 6) || (x === 22 && y === 8)) {
+        type = 'plant';
+        walkable = false;
+        label = 'Potted Plant';
+      }
+      // 9. 員工辦公桌點位
       else {
         const isDesk = OFFICE_LOCATIONS.desks.some(d => d.x === x && d.y === y);
         if (isDesk) {
