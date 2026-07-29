@@ -67,7 +67,7 @@ app.get('/api/providers', (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (防 CORS 且維護 API Key 安全)
+ * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (包含完整 Console Log)
  */
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
@@ -76,6 +76,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     const provider = config.providers?.[providerId];
 
     if (!provider || providerId === 'mock' || !provider.apiKey) {
+      console.log(`[LLM Call] Mode: Mock AI | Speaker: ${speakerName} (${speakerRole})`);
       return res.json({ status: 'mock' });
     }
 
@@ -95,12 +96,20 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       });
     }
 
-    // 依據 sdk 發送請求 (Ollama 或 OpenAI 相容 API)
-    if (provider.sdk === 'ollama') {
-      const baseUrl = (provider.baseURL || 'https://ollama.com').replace(/\/$/, '');
-      const endpoint = `${baseUrl}/api/chat`;
+    const baseUrl = (provider.baseURL || (provider.sdk === 'ollama' ? 'https://ollama.com' : 'https://api.openai.com/v1')).replace(/\/$/, '');
+    const endpoint = provider.sdk === 'ollama' ? `${baseUrl}/api/chat` : `${baseUrl}/chat/completions`;
 
-      const response = await fetch(endpoint, {
+    // 格式化輸出請求 Log
+    console.log('\n=================== 🤖 LLM Request ===================');
+    console.log(`[Speaker]  : ${speakerName} (${speakerRole})`);
+    console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
+    console.log(`[SDK/Model]: ${provider.sdk} / ${provider.defaultModel}`);
+    console.log(`[Endpoint] : ${endpoint}`);
+    if (topic) console.log(`[Topic]    : ${topic}`);
+
+    let response: any;
+    if (provider.sdk === 'ollama') {
+      response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,23 +121,8 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           stream: false
         })
       });
-
-      const resText = await response.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(resText);
-      } catch (e) {}
-
-      const text = data.message?.content || data.choices?.[0]?.message?.content;
-      if (text && typeof text === 'string') {
-        return res.json({ status: 'success', text: text.trim() });
-      }
     } else {
-      // OpenAI Compatible (OpenCode Zen, Agnes AI, OpenAI etc.)
-      const baseUrl = (provider.baseURL || 'https://api.openai.com/v1').replace(/\/$/, '');
-      const endpoint = `${baseUrl}/chat/completions`;
-
-      const response = await fetch(endpoint, {
+      response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,17 +135,25 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           temperature: 0.8
         })
       });
+    }
 
-      const resText = await response.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(resText);
-      } catch (e) {}
+    console.log(`[HTTP Status]: ${response.status} ${response.statusText}`);
 
-      const text = data.choices?.[0]?.message?.content;
-      if (text && typeof text === 'string') {
-        return res.json({ status: 'success', text: text.trim() });
-      }
+    const resText = await response.text();
+    let data: any = {};
+    try {
+      data = JSON.parse(resText);
+    } catch (e) {}
+
+    const text = data.message?.content || data.choices?.[0]?.message?.content;
+    if (text && typeof text === 'string') {
+      console.log(`[LLM Response]: "${text.trim()}"`);
+      console.log('=========================================================\n');
+      return res.json({ status: 'success', text: text.trim() });
+    } else {
+      console.warn(`[LLM Warning]: API 尚未回傳有效文字或包含錯誤內容。`);
+      console.warn(`[Raw Data]   : ${resText.substring(0, 250)}`);
+      console.log('=========================================================\n');
     }
 
     return res.json({ status: 'mock' });

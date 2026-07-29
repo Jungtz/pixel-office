@@ -103,7 +103,7 @@ export function generateMockResponse(
 }
 
 /**
- * 呼叫後端 API (/api/chat) 進行安全且無 CORS 限制的 LLM 回覆產生
+ * 呼叫後端 API (/api/chat) 進行 LLM 回覆產生 (包含 Frontend Console Log)
  */
 export async function fetchLLMResponse(
   config: LLMConfig,
@@ -119,6 +119,8 @@ export async function fetchLLMResponse(
       topic
     );
   }
+
+  console.log(`[Client AI Agent] Requesting LLM for ${speakerName} (${speakerRole}) via "${config.provider}"...`);
 
   try {
     const response = await fetch('/api/chat', {
@@ -140,13 +142,15 @@ export async function fetchLLMResponse(
       if (contentType.includes('application/json')) {
         const data = await response.json();
         if (data.status === 'success' && data.text && typeof data.text === 'string') {
+          console.log(`[Client AI Agent] Received LLM response for ${speakerName}: "${data.text}"`);
           return data.text;
         }
       }
     }
   } catch (err) {
-    console.warn('Backend API Call Error, fallback to mock:', err);
+    console.warn('[Client AI Agent Error] Backend API call failed, fallback to mock:', err);
   }
 
+  console.log(`[Client AI Agent] Fallback to Mock Response for ${speakerName} (${speakerRole})`);
   return generateMockResponse({ role: speakerRole, name: speakerName } as AgentCharacter, contextMessages, topic);
 }
