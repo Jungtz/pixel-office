@@ -28,6 +28,23 @@ const MOCK_DIALOGUE_SCRIPTS: Record<string, string[]> = {
 };
 
 /**
+ * 解析 API 代理路徑，解決瀏覽器跨網域 CORS (Failed to fetch) 限制
+ */
+function resolveEndpointUrl(baseUrl: string | undefined, defaultSuffix: string): string {
+  const url = (baseUrl || '').replace(/\/$/, '');
+  if (url.includes('ollama.com')) {
+    return url.replace('https://ollama.com', '/api-proxy/ollama') + defaultSuffix;
+  }
+  if (url.includes('opencode.ai')) {
+    return url.replace('https://opencode.ai', '/api-proxy/opencode') + defaultSuffix;
+  }
+  if (url.includes('agnes-ai.com')) {
+    return url.replace('https://apihub.agnes-ai.com', '/api-proxy/agnes') + defaultSuffix;
+  }
+  return url ? `${url}${defaultSuffix}` : `https://api.openai.com/v1${defaultSuffix}`;
+}
+
+/**
  * 產生 Mock 對話回應
  */
 export function generateMockResponse(
@@ -139,11 +156,9 @@ export async function fetchLLMResponse(
   }
 
   try {
-    const baseUrl = (config.baseUrl || '').replace(/\/$/, '');
-
     // Ollama SDK / Ollama Cloud API
     if (config.sdk === 'ollama') {
-      const endpoint = `${baseUrl}/api/chat`;
+      const endpoint = resolveEndpointUrl(config.baseUrl, '/api/chat');
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -163,7 +178,7 @@ export async function fetchLLMResponse(
       }
     } else {
       // OpenAI Compatible SDK (OpenCode Zen, Agnes AI, OpenAI, etc.)
-      const endpoint = baseUrl ? `${baseUrl}/chat/completions` : 'https://api.openai.com/v1/chat/completions';
+      const endpoint = resolveEndpointUrl(config.baseUrl, '/chat/completions');
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
