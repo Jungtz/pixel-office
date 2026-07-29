@@ -15,6 +15,14 @@ export const OFFICE_LOCATIONS = {
   whiteboard: { x: 18, y: 1 },
   sofaArea: [{ x: 2, y: 13 }, { x: 3, y: 13 }, { x: 4, y: 13 }],
   bossDesk: { x: 20, y: 12 },
+  whiteboardStand: { x: 16, y: 2 },
+  windowArea: [
+    { x: 5, y: 14 }, { x: 9, y: 14 }, { x: 14, y: 14 }, { x: 19, y: 14 }
+  ],
+  centerArea: [
+    { x: 10, y: 7 }, { x: 11, y: 7 }, { x: 12, y: 7 }, { x: 13, y: 7 },
+    { x: 10, y: 8 }, { x: 11, y: 8 }, { x: 12, y: 8 }, { x: 13, y: 8 }
+  ],
   desks: [
     // RD Desks
     { x: 6, y: 4 }, { x: 8, y: 4 }, { x: 6, y: 6 }, { x: 8, y: 6 },

@@ -30,7 +30,7 @@ export interface PixelPosition {
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
-export type AgentStatus = 'idle' | 'walking' | 'working' | 'talking' | 'coffee' | 'meeting' | 'resting';
+export type AgentStatus = 'idle' | 'walking' | 'working' | 'talking' | 'coffee' | 'meeting' | 'resting' | 'phone' | 'stretch' | 'daydream' | 'thinking' | 'patrolling';
 
 export interface AgentNeeds {
   energy: number;   // 0 ~ 100
@@ -64,6 +64,10 @@ export interface AgentCharacter {
   emojiBubble: string | null;
   emojiTimer: number;
   actionTargetId: string | null;
+  lastRoleActionTime: number;
+  lastIdleActionTime: number;
+  eventMoveTarget: Position | 'desk' | 'sofa' | 'center' | null;
+  eventMoveStatus: AgentStatus | null;
 }
 
 export interface ChatMessage {
