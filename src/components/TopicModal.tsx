@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { LLMConfig, generateMockTopic } from '../services/aiAgent';
 import { soundManager } from '../services/sound';
-import { Sparkles, Dices, ArrowRight, Lightbulb } from 'lucide-react';
+import { Sparkles, Dices, ArrowRight, ArrowLeft, Lightbulb } from 'lucide-react';
 
 interface TopicModalProps {
   isOpen: boolean;
   llmConfig: LLMConfig;
   onConfirmTopic: (topic: string) => void;
+  onBack: () => void;
 }
 
 export const TopicModal: React.FC<TopicModalProps> = ({
   isOpen,
   llmConfig,
-  onConfirmTopic
+  onConfirmTopic,
+  onBack
 }) => {
   const [topic, setTopic] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -146,8 +148,19 @@ export const TopicModal: React.FC<TopicModalProps> = ({
               </div>
             </div>
 
-            {/* Footer Submit Button */}
-            <div className="flex items-center justify-end border-t border-slate-800 pt-4">
+            {/* Footer Navigation Buttons */}
+            <div className="flex items-center justify-between border-t border-slate-800 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  soundManager.playSelectSound();
+                  onBack();
+                }}
+                className="px-4 py-2 text-xs font-mono text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded transition flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-4 h-4" /> 上一步
+              </button>
+
               <button
                 type="submit"
                 disabled={!topic.trim() || isGenerating}

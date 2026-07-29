@@ -311,7 +311,12 @@ export const App: React.FC = () => {
         isOpen={isTopicOpen}
         llmConfig={llmConfig}
         onConfirmTopic={handleConfirmTopic}
+        onBack={() => {
+          setIsTopicOpen(false);
+          setIsSetupOpen(true);
+        }}
       />
+
 
     </div>
   );
