@@ -135,9 +135,14 @@ export async function fetchLLMResponse(
       })
     });
 
-    const data = await response.json();
-    if (data.status === 'success' && data.text && typeof data.text === 'string') {
-      return data.text;
+    if (response.ok) {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        if (data.status === 'success' && data.text && typeof data.text === 'string') {
+          return data.text;
+        }
+      }
     }
   } catch (err) {
     console.warn('Backend API Call Error, fallback to mock:', err);

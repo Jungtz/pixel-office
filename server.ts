@@ -113,7 +113,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         })
       });
 
-      const data: any = await response.json();
+      const resText = await response.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch (e) {}
+
       const text = data.message?.content || data.choices?.[0]?.message?.content;
       if (text && typeof text === 'string') {
         return res.json({ status: 'success', text: text.trim() });
@@ -137,7 +142,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         })
       });
 
-      const data: any = await response.json();
+      const resText = await response.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch (e) {}
+
       const text = data.choices?.[0]?.message?.content;
       if (text && typeof text === 'string') {
         return res.json({ status: 'success', text: text.trim() });
