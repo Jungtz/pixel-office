@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { RoleType } from '../game/types';
 import { ROLE_CONFIGS } from '../services/roles';
 import { soundManager } from '../services/sound';
-import { getProviderList, getProviderById, ProviderDefinition } from '../services/configService';
-import { Users, Sparkles, Play, ShieldAlert, Key, Cpu, Globe } from 'lucide-react';
+import { getProviderList, getProviderById, resolveModel } from '../services/configService';
+import { Users, Sparkles, Play, ShieldAlert } from 'lucide-react';
 
 export interface RoleSetupConfig {
   counts: Record<RoleType, number>;
@@ -65,7 +65,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
     if (provDef) {
       setApiKey(provDef.apiKey);
       setBaseUrl(provDef.baseURL);
-      setModel(provDef.defaultModel);
+      setModel(provId === 'agnes-ai' ? resolveModel() : provDef.defaultModel);
       setSdk(provDef.sdk);
     } else {
       setApiKey('');
@@ -91,7 +91,6 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
     });
   };
 
-  const currentProviderDef = getProviderById(selectedProviderId);
 
   return (
     <div
@@ -221,29 +220,6 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                   );
                 })}
               </div>
-
-              {selectedProviderId !== 'mock' && (
-                <div className="mt-2 p-3 bg-slate-950/80 border border-slate-800 rounded flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-xs font-mono text-amber-300">
-                    <Key className="w-3.5 h-3.5" /> API Key (金鑰):
-                  </div>
-                  <input
-                    type="password"
-                    placeholder={`請輸入 ${selectedProviderId} API Key...`}
-                    value={apiKey}
-                    onChange={e => setApiKey(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400"
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-slate-400 mt-1 pt-1 border-t border-slate-800/80">
-                    <span className="flex items-center gap-1 text-sky-400">
-                      <Cpu className="w-3 h-3" /> 模型: <strong className="text-slate-200">{model || currentProviderDef?.defaultModel}</strong>
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-400">
-                      <Globe className="w-3 h-3" /> 端點: <span className="text-slate-400">{baseUrl || currentProviderDef?.baseURL}</span>
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Footer Submit Button */}
