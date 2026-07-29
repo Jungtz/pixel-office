@@ -3,8 +3,9 @@ import { createDefaultMap, OFFICE_LOCATIONS, isTileWalkable, TILE_SIZE } from '.
 import { findPath } from './game/pathfinding';
 import { AgentCharacter, ChatMessage, Position, RoleType, MeetingState } from './game/types';
 import { fetchLLMResponse, LLMConfig } from './services/aiAgent';
-import { getGameLoopConfig } from './services/configService';
+import { getProviderList, getProviderById, getGameLoopConfig, getInitialTopic } from './services/configService';
 import { ROLE_CONFIGS } from './services/roles';
+
 
 
 import { soundManager } from './services/sound';
@@ -32,6 +33,8 @@ export const App: React.FC = () => {
     startTime: 0
   });
 
+  const [currentTopic, setCurrentTopic] = useState<string>(() => getInitialTopic());
+
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     provider: 'mock'
   });
@@ -49,6 +52,8 @@ export const App: React.FC = () => {
       sdk: config.sdk
     });
 
+    const initTopic = getInitialTopic();
+    setCurrentTopic(initTopic);
 
     const newAgents: AgentCharacter[] = [];
     let deskIdx = 0;
@@ -85,6 +90,14 @@ export const App: React.FC = () => {
 
     setAgents(newAgents);
     setIsSetupOpen(false);
+
+    // 遊戲啟動宣告開場主題 (由 Boss 或 PM 進行開場引言)
+    setTimeout(() => {
+      const leader = newAgents.find(a => a.role === 'BOSS') || newAgents.find(a => a.role === 'PM') || newAgents[0];
+      if (leader) {
+        triggerAgentSpeech(leader, `團隊核心目標：${initTopic}`);
+      }
+    }, 600);
   };
 
   // 2. 自動漫遊與對話循環 (Agent Autonomous Loop)
@@ -125,17 +138,18 @@ export const App: React.FC = () => {
         }
       }
 
-      // 自動觸發對話 (間隔與機率來自 config.json)
+      // 自動觸發對話 (帶入當前辦公室主題與 config.json 設定)
       const { minIntervalMs, chance } = loopConfig.dialogueTrigger;
       if (now - lastDialogueTime.current > minIntervalMs && Math.random() < chance) {
         lastDialogueTime.current = now;
         const speaker = agents[Math.floor(Math.random() * agents.length)];
-        triggerAgentSpeech(speaker);
+        triggerAgentSpeech(speaker, currentTopic);
       }
     }, loopConfig.heartbeatIntervalMs);
 
     return () => clearInterval(interval);
-  }, [agents, isSetupOpen, meetingState, map]);
+  }, [agents, isSetupOpen, meetingState, map, currentTopic]);
+
 
 
   // 更新特定 Agent 的尋路路徑
@@ -179,6 +193,7 @@ export const App: React.FC = () => {
   // 3. 召開全體會議 (Call Meeting)
   const handleCallMeeting = async (topic: string) => {
     soundManager.playFanfareSound();
+    setCurrentTopic(topic);
 
     // 將所有成員集結至會議室座位
     const updatedAgents = agents.map((agent, idx) => {
@@ -212,11 +227,13 @@ export const App: React.FC = () => {
   // 4. 派發需求/任務 (Dispatch Task)
   const handleDispatchTask = async (task: string) => {
     soundManager.playFanfareSound();
+    setCurrentTopic(task);
     const pm = agents.find(a => a.role === 'PM') || agents[0];
     if (pm) {
       await triggerAgentSpeech(pm, `緊急任務通知：${task}`);
     }
   };
+
 
   // 5. 隨機爆發事件 (Random Incident)
   const handleTriggerRandomEvent = () => {
