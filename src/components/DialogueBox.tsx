@@ -72,8 +72,9 @@ export const DialogueBox: React.FC<DialogueBoxProps> = ({
         justifyContent: 'center',
         alignItems: 'flex-end',
         pointerEvents: 'none',
-        zIndex: 40
+        zIndex: 60
       }}
+
     >
       <div
         className="w-[90%] max-w-3xl animate-fade-in"

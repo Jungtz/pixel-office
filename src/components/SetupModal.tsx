@@ -110,9 +110,15 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
         backdropFilter: 'blur(8px)',
       }}
     >
-      <div className="bg-slate-900 border-4 border-amber-400 max-w-2xl w-full p-1 rounded-sm shadow-2xl animate-scale-up">
+      <div
+        className="bg-slate-900 border-4 border-amber-400 max-w-2xl w-full p-1 rounded-sm shadow-2xl animate-scale-up"
+        style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+      >
+        <div
+          className="bg-slate-950 border-2 border-amber-500/60 p-5 md:p-6 flex flex-col gap-4 overflow-y-auto"
+          style={{ maxHeight: 'calc(92vh - 8px)' }}
+        >
 
-        <div className="bg-slate-950 border-2 border-amber-500/60 p-6 flex flex-col gap-6">
           
           {/* Header */}
           <div className="text-center border-b border-slate-800 pb-4">

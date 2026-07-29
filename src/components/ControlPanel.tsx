@@ -173,9 +173,28 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
       {/* 輸入話題 / 任務彈窗 */}
       {showInputModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-4 border-amber-400 p-1 rounded max-w-md w-full shadow-2xl animate-scale-up">
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 80,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(2, 6, 23, 0.7)',
+            backdropFilter: 'blur(4px)'
+          }}
+        >
+          <div
+            className="bg-slate-900 border-4 border-amber-400 p-1 rounded max-w-md w-full shadow-2xl animate-scale-up"
+            style={{ maxHeight: '90vh', overflowY: 'auto' }}
+          >
             <div className="bg-slate-950 border-2 border-amber-500/60 p-5 flex flex-col gap-4">
+
               
               <h2 className="text-base font-bold font-mono text-amber-400 flex items-center gap-2">
                 {showInputModal === 'meeting' ? (
