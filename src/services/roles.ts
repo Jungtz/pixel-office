@@ -1,4 +1,13 @@
 import { RoleConfig, RoleType } from '../game/types';
+import {
+  PM_PROMPT,
+  RD_PROMPT,
+  QA_PROMPT,
+  UIUX_PROMPT,
+  AD_PROMPT,
+  INTERN_PROMPT,
+  BOSS_PROMPT
+} from '../prompts';
 
 export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
   PM: {
@@ -17,7 +26,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '客戶說這個需求很急，今天一定要看到！',
       '可以先做 MVP (最小可行性產品) 嗎？'
     ],
-    systemPrompt: '你是一名資深的專案經理 (PM)。你說話簡潔、極度關注時程與進度。你喜歡問 ETA、要求每日 Sync、關注 Milestone。說話時請帶入 PM 的專業術語與熱情催進度的口吻。'
+    systemPrompt: PM_PROMPT
   },
   RD: {
     id: 'RD',
@@ -35,7 +44,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '請給我具體的 Steps to Reproduce。',
       '再給我兩杯 Espresso，我今晚把這個 PR 拼出來。'
     ],
-    systemPrompt: '你是一名研發工程師 (RD/Dev)。你理智、講求程式邏輯、討厭隨意變更需求。你經常喝咖啡、講話帶技術用語（如 Bug, Refactor, PR, Local, Server crash）。'
+    systemPrompt: RD_PROMPT
   },
   QA: {
     id: 'QA',
@@ -44,7 +53,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
     avatarColor: '#d97706', // 琥珀黃
     hairColor: '#92400e',
     clothingColor: '#b45309',
-    description: '專門尋找極端邊界條件 (Edge Case)，任何極小的瑕疵都逃不過眼尖。',
+    description: '專門尋找極端條件 (Edge Case)，任何極小的瑕疵都逃不過眼尖。',
     personality: '嚴苛、注重細節、說話實事求是、最爽快的事情是開缺陷單 (Issue)。',
     catchphrases: [
       '快速連續點擊三下，程式就 Crash 了！',
@@ -53,7 +62,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '請不要在正式環境狂測，測試環境打不開了。',
       '驗收沒過，給我不准上線！'
     ],
-    systemPrompt: '你是一名嚴格的測試工程師 (QA)。你擅長抓出各種邊界條件、邏輯漏洞與崩潰點。你說話直白、抓毛病能力極強，最常講的就是「復現步驟」與「Blocker Issue」。'
+    systemPrompt: QA_PROMPT
   },
   UIUX: {
     id: 'UIUX',
@@ -71,7 +80,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '使用者不會這樣點擊的，UX 流程不順！',
       '別用瀏覽器原生樣式，太醜了！'
     ],
-    systemPrompt: '你是一名 UI/UX 設計師。你注重美學、視覺細節、動畫曲線與 User Journey。你對像素差距 (px)、顏色對比度、Design System 與 Figma 規範極度執著。'
+    systemPrompt: UIUX_PROMPT
   },
   AD: {
     id: 'AD',
@@ -89,7 +98,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '這顏色太死板，要有生命力與情緒渲染！',
       '整體視覺靈魂還沒出來，再調！'
     ],
-    systemPrompt: '你是一名藝術總監 (AD)。你說話充滿視覺感染力與情感，追求高品質、大氣磅礡、視覺衝擊與風格靈魂。你常說「感覺不對」、「要讓人感到驚豔 (WOW)」。'
+    systemPrompt: AD_PROMPT
   },
   INTERN: {
     id: 'INTERN',
@@ -107,7 +116,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '請問 Git rebase 失敗要怎麼辦...？',
       '大家辛苦了，要喝飲料嗎？我訂手搖飲！'
     ],
-    systemPrompt: '你是一名勤奮可愛的實習生 (Intern)。你熱心、謙虛、容易緊張但學習欲望極強。你經常稱呼大家為學長學姊，並主動承擔倒咖啡、訂飲料等雜事。'
+    systemPrompt: INTERN_PROMPT
   },
   BOSS: {
     id: 'BOSS',
@@ -125,6 +134,6 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       'AI 時代到了，我們要全面 Embracing AI！',
       '這週大家辛苦一下，勝敗在此一舉！'
     ],
-    systemPrompt: '你是公司的老闆/CEO (Boss)。你富有激情、喜歡畫大餅、關注公司發展與商業回報。你說話豪邁且鼓舞人心。'
+    systemPrompt: BOSS_PROMPT
   }
 };

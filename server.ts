@@ -39,6 +39,21 @@ function loadConfig(): AppConfig {
 }
 
 /**
+ * 讀取角色專屬人設 Markdown 檔 (src/prompts/{role}.md)
+ */
+function loadRolePrompt(roleId: string): string {
+  const promptPath = path.join(process.cwd(), 'src', 'prompts', `${roleId.toLowerCase()}.md`);
+  if (fs.existsSync(promptPath)) {
+    try {
+      return fs.readFileSync(promptPath, 'utf-8').trim();
+    } catch (err) {
+      console.error(`Failed to read prompt file for ${roleId}:`, err);
+    }
+  }
+  return `你是一名 ${roleId}。說話請保持該職位的性格特點。`;
+}
+
+/**
  * GET /api/providers - 提供前端可選的 AI Provider 列表
  */
 app.get('/api/providers', (req: Request, res: Response) => {
@@ -67,7 +82,7 @@ app.get('/api/providers', (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (包含完整 Console Log)
+ * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (從 src/prompts/*.md 載入人設)
  */
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
@@ -80,7 +95,8 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       return res.json({ status: 'mock' });
     }
 
-    const systemPrompt = `你是一名 ${speakerRole}。你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。`;
+    const basePrompt = loadRolePrompt(speakerRole);
+    const systemPrompt = `${basePrompt} 你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。`;
     const messagesPayload = [
       { role: 'system', content: systemPrompt },
       ...(contextMessages || []).slice(-5).map((m: any) => ({
@@ -102,6 +118,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     // 格式化輸出請求 Log
     console.log('\n=================== 🤖 LLM Request ===================');
     console.log(`[Speaker]  : ${speakerName} (${speakerRole})`);
+    console.log(`[Prompt MD]: src/prompts/${speakerRole.toLowerCase()}.md`);
     console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
     console.log(`[SDK/Model]: ${provider.sdk} / ${provider.defaultModel}`);
     console.log(`[Endpoint] : ${endpoint}`);
