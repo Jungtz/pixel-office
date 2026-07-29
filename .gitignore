@@ -35,3 +35,7 @@ lerna-debug.log*
 .env
 .env.local
 .env.*.local
+
+# Root config file (contains sensitive provider credentials)
+# Ignore the actual config file but keep the example file tracked
+config.json

@@ -2,13 +2,17 @@ import React, { useState } from 'react';
 import { RoleType } from '../game/types';
 import { ROLE_CONFIGS } from '../services/roles';
 import { soundManager } from '../services/sound';
-import { Users, Sparkles, Play, ShieldAlert } from 'lucide-react';
+import { getProviderList, getProviderById, ProviderDefinition } from '../services/configService';
+import { Users, Sparkles, Play, ShieldAlert, Key, Cpu, Globe } from 'lucide-react';
 
 export interface RoleSetupConfig {
   counts: Record<RoleType, number>;
   useMockAI: boolean;
   apiKey?: string;
-  provider: 'mock' | 'openai' | 'gemini';
+  provider: string;
+  baseUrl?: string;
+  model?: string;
+  sdk?: string;
 }
 
 interface SetupModalProps {
@@ -37,8 +41,12 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
     BOSS: 1
   });
 
-  const [provider, setProvider] = useState<'mock' | 'openai' | 'gemini'>('mock');
-  const [apiKey, setApiKey] = useState('');
+  const providers = getProviderList();
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('mock');
+  const [apiKey, setApiKey] = useState<string>('');
+  const [baseUrl, setBaseUrl] = useState<string>('');
+  const [model, setModel] = useState<string>('');
+  const [sdk, setSdk] = useState<string>('');
 
   if (!isOpen) return null;
 
@@ -50,6 +58,23 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
     });
   };
 
+  const handleSelectProvider = (provId: string) => {
+    soundManager.playSelectSound();
+    setSelectedProviderId(provId);
+    const provDef = getProviderById(provId);
+    if (provDef) {
+      setApiKey(provDef.apiKey);
+      setBaseUrl(provDef.baseURL);
+      setModel(provDef.defaultModel);
+      setSdk(provDef.sdk);
+    } else {
+      setApiKey('');
+      setBaseUrl('');
+      setModel('');
+      setSdk('');
+    }
+  };
+
   const totalMembers = Object.values(counts).reduce((a, b) => a + b, 0);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -57,11 +82,16 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
     soundManager.playFanfareSound();
     onStart({
       counts,
-      useMockAI: provider === 'mock',
+      useMockAI: selectedProviderId === 'mock',
+      provider: selectedProviderId,
       apiKey,
-      provider
+      baseUrl,
+      model,
+      sdk
     });
   };
+
+  const currentProviderDef = getProviderById(selectedProviderId);
 
   return (
     <div
@@ -98,7 +128,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             
             {/* 角色數量選擇 Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1">
               {(Object.keys(ROLE_CONFIGS) as RoleType[]).map(roleKey => {
                 const role = ROLE_CONFIGS[roleKey];
                 const count = counts[roleKey];
@@ -125,7 +155,6 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                       </div>
                     </div>
 
-
                     {/* 人數計數器 */}
                     <div className="flex items-center gap-2 bg-slate-950 px-2 py-1 border border-slate-800 rounded">
                       <button
@@ -151,60 +180,64 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
               })}
             </div>
 
-            {/* AI 驅動模式選擇 */}
+            {/* AI 驅動模式選擇 (連動 config.json) */}
             <div className="bg-slate-900/90 border border-slate-800 p-4 rounded flex flex-col gap-3">
               <label className="text-xs font-mono font-bold text-amber-400 flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4" /> AI 對話驅動模式：
+                <ShieldAlert className="w-4 h-4 text-amber-400" /> AI 對話驅動模式 (已整合 config.json Providers)：
               </label>
 
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => { soundManager.playSelectSound(); setProvider('mock'); }}
-                  className={`py-2 px-3 text-xs font-mono rounded border transition text-center ${
-                    provider === 'mock'
-                      ? 'bg-amber-400 text-slate-950 font-bold border-amber-500'
-                      : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  ⚡ 即插即用 (Mock AI)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { soundManager.playSelectSound(); setProvider('openai'); }}
-                  className={`py-2 px-3 text-xs font-mono rounded border transition text-center ${
-                    provider === 'openai'
-                      ? 'bg-amber-400 text-slate-950 font-bold border-amber-500'
-                      : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  🤖 OpenAI (GPT-3.5)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { soundManager.playSelectSound(); setProvider('gemini'); }}
-                  className={`py-2 px-3 text-xs font-mono rounded border transition text-center ${
-                    provider === 'gemini'
-                      ? 'bg-amber-400 text-slate-950 font-bold border-amber-500'
-                      : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  ✨ Google Gemini
-                </button>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {providers.map(prov => {
+                  const isSelected = selectedProviderId === prov.id;
+                  let icon = '⚡';
+                  if (prov.id === 'ollama-cloud') icon = '🦙';
+                  else if (prov.id === 'opencode-zen') icon = '🚀';
+                  else if (prov.id === 'agnes-ai') icon = '✨';
+
+                  return (
+                    <button
+                      key={prov.id}
+                      type="button"
+                      onClick={() => handleSelectProvider(prov.id)}
+                      className={`py-2 px-2 text-xs font-mono rounded border transition flex flex-col items-center justify-center gap-1 text-center ${
+                        isSelected
+                          ? 'bg-amber-400 text-slate-950 font-bold border-amber-500 shadow-md'
+                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="font-bold text-xs flex items-center gap-1">
+                        <span>{icon}</span> {prov.description}
+                      </span>
+                      {prov.defaultModel && prov.id !== 'mock' && (
+                        <span className={`text-[10px] ${isSelected ? 'text-slate-900 font-bold' : 'text-slate-500'} font-mono`}>
+                          {prov.defaultModel}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
-              {provider !== 'mock' && (
-                <div className="mt-2">
+              {selectedProviderId !== 'mock' && (
+                <div className="mt-2 p-3 bg-slate-950/80 border border-slate-800 rounded flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-xs font-mono text-amber-300">
+                    <Key className="w-3.5 h-3.5" /> API Key (金鑰):
+                  </div>
                   <input
                     type="password"
-                    placeholder={`請輸入 ${provider.toUpperCase()} API Key...`}
+                    placeholder={`請輸入 ${selectedProviderId} API Key...`}
                     value={apiKey}
                     onChange={e => setApiKey(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400"
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    * API Key 僅在您的本機瀏覽器內運作，不會上傳至任何第三方程式庫。
-                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-slate-400 mt-1 pt-1 border-t border-slate-800/80">
+                    <span className="flex items-center gap-1 text-sky-400">
+                      <Cpu className="w-3 h-3" /> 模型: <strong className="text-slate-200">{model || currentProviderDef?.defaultModel}</strong>
+                    </span>
+                    <span className="flex items-center gap-1 text-slate-400">
+                      <Globe className="w-3 h-3" /> 端點: <span className="text-slate-400">{baseUrl || currentProviderDef?.baseURL}</span>
+                    </span>
+                  </div>
                 </div>
               )}
             </div>

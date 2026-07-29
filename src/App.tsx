@@ -40,8 +40,12 @@ export const App: React.FC = () => {
   const handleStartSetup = (config: RoleSetupConfig) => {
     setLlmConfig({
       provider: config.provider,
-      apiKey: config.apiKey
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      sdk: config.sdk
     });
+
 
     const newAgents: AgentCharacter[] = [];
     let deskIdx = 0;

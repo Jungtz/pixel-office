@@ -2,10 +2,11 @@ import { ROLE_CONFIGS } from './roles';
 import { AgentCharacter, ChatMessage, RoleType } from '../game/types';
 
 export interface LLMConfig {
-  provider: 'mock' | 'openai' | 'gemini';
+  provider: string;
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  sdk?: string;
 }
 
 // 預設 Mock 劇本對話庫 (針對辦公室日常情境與會議話題)
@@ -101,9 +102,8 @@ export function generateMockResponse(
   }
 }
 
-
 /**
- * 呼叫真實大語言模型 API (OpenAI 或 Gemini)
+ * 呼叫真實大語言模型 API (支援 Ollama, OpenAI, OpenCode, Agnes 等 Cloud API)
  */
 export async function fetchLLMResponse(
   config: LLMConfig,
@@ -120,7 +120,7 @@ export async function fetchLLMResponse(
     );
   }
 
-  const roleConfig = ROLE_CONFIGS[speakerRole];
+  const roleConfig = ROLE_CONFIGS[speakerRole] || ROLE_CONFIGS['RD'];
   const systemPrompt = `${roleConfig.systemPrompt} 你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。`;
 
   const messagesPayload = [
@@ -139,8 +139,32 @@ export async function fetchLLMResponse(
   }
 
   try {
-    if (config.provider === 'openai') {
-      const response = await fetch(`${config.baseUrl || 'https://api.openai.com/v1'}/chat/completions`, {
+    const baseUrl = (config.baseUrl || '').replace(/\/$/, '');
+
+    // Ollama SDK / Ollama Cloud API
+    if (config.sdk === 'ollama') {
+      const endpoint = `${baseUrl}/api/chat`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`
+        },
+        body: JSON.stringify({
+          model: config.model || 'gemma4:31b-cloud',
+          messages: messagesPayload,
+          stream: false
+        })
+      });
+      const data = await response.json();
+      const resText = data.message?.content || data.choices?.[0]?.message?.content;
+      if (resText && typeof resText === 'string') {
+        return resText.trim();
+      }
+    } else {
+      // OpenAI Compatible SDK (OpenCode Zen, Agnes AI, OpenAI, etc.)
+      const endpoint = baseUrl ? `${baseUrl}/chat/completions` : 'https://api.openai.com/v1/chat/completions';
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,29 +173,19 @@ export async function fetchLLMResponse(
         body: JSON.stringify({
           model: config.model || 'gpt-3.5-turbo',
           messages: messagesPayload,
-          max_tokens: 100,
+          max_tokens: 120,
           temperature: 0.8
         })
       });
       const data = await response.json();
-      return data.choices?.[0]?.message?.content?.trim() || generateMockResponse({ role: speakerRole } as AgentCharacter, contextMessages, topic);
-    } else if (config.provider === 'gemini') {
-      // Gemini API call
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.model || 'gemini-1.5-flash'}:generateContent?key=${config.apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: `${systemPrompt}\n\n對話歷史:\n${messagesPayload.map(m => `${m.role}: ${m.content}`).join('\n')}` }]
-          }]
-        })
-      });
-      const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || generateMockResponse({ role: speakerRole } as AgentCharacter, contextMessages, topic);
+      const resText = data.choices?.[0]?.message?.content;
+      if (resText && typeof resText === 'string') {
+        return resText.trim();
+      }
     }
   } catch (err) {
     console.warn('LLM API Error, fallback to mock:', err);
   }
 
-  return generateMockResponse({ role: speakerRole } as AgentCharacter, contextMessages, topic);
+  return generateMockResponse({ role: speakerRole, name: speakerName } as AgentCharacter, contextMessages, topic);
 }
