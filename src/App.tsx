@@ -123,9 +123,9 @@ export const App: React.FC = () => {
             workProgress: 0
           },
           needs: {
-            energy: Math.floor(Math.random() * 25 + 65),
-            caffeine: Math.floor(Math.random() * 25 + 60),
-            social: Math.floor(Math.random() * 30 + 45)
+            energy: Math.floor(Math.random() * 45 + 45),
+            caffeine: Math.floor(Math.random() * 50 + 35),
+            social: Math.floor(Math.random() * 50 + 25)
           },
           activityStartTime: 0,
           activityDuration: 0,

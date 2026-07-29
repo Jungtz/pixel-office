@@ -1,11 +1,11 @@
 import { AgentCharacter, AgentNeeds, AgentStatus, Position } from './types';
 import { OFFICE_LOCATIONS } from './officeMap';
 
-const ENERGY_DECAY_PER_SEC = 1.5;
-const CAFFEINE_DECAY_PER_SEC = 1.0;
-const SOCIAL_DECAY_PER_SEC = 0.8;
+const BASE_ENERGY_DECAY = 1.5;
+const BASE_CAFFEINE_DECAY = 1.0;
+const BASE_SOCIAL_DECAY = 0.8;
 
-const NEED_THRESHOLD = 35;
+const NEED_THRESHOLD_BASE = 38;
 
 const ENERGY_RECOVERY = 55;
 const CAFFEINE_RECOVERY = 65;
@@ -17,6 +17,27 @@ const COFFEE_DURATION_MS = 3500;
 const REST_DURATION_MS = 5000;
 const CHAT_DURATION_MS = 4000;
 const WATER_COOLER_DURATION_MS = 2500;
+
+function hashAgentId(id: string, seed: number): number {
+  let hash = seed;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash) + id.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function agentDecayFactor(id: string): number {
+  return 0.82 + (hashAgentId(id, 7) % 37) / 100;
+}
+
+function agentThreshold(id: string): number {
+  return NEED_THRESHOLD_BASE - 7 + (hashAgentId(id, 13) % 15);
+}
+
+function agentHesitation(id: string): number {
+  return (hashAgentId(id, 3) % 100) / 100;
+}
 
 export interface BehaviorDecision {
   action: 'move' | 'stay';
@@ -32,9 +53,10 @@ function clampNeed(value: number): number {
 }
 
 function decayNeeds(agent: AgentCharacter, deltaSeconds: number): void {
-  agent.needs.energy = clampNeed(agent.needs.energy - ENERGY_DECAY_PER_SEC * deltaSeconds);
-  agent.needs.caffeine = clampNeed(agent.needs.caffeine - CAFFEINE_DECAY_PER_SEC * deltaSeconds);
-  agent.needs.social = clampNeed(agent.needs.social - SOCIAL_DECAY_PER_SEC * deltaSeconds);
+  const factor = agentDecayFactor(agent.id);
+  agent.needs.energy = clampNeed(agent.needs.energy - BASE_ENERGY_DECAY * factor * deltaSeconds);
+  agent.needs.caffeine = clampNeed(agent.needs.caffeine - BASE_CAFFEINE_DECAY * factor * deltaSeconds);
+  agent.needs.social = clampNeed(agent.needs.social - BASE_SOCIAL_DECAY * factor * deltaSeconds);
 
   agent.stats.stress = clampNeed(100 - (agent.needs.energy + agent.needs.social) / 2);
   agent.stats.coffeeLevel = agent.needs.caffeine;
@@ -112,6 +134,17 @@ function findNearbyColleague(agent: AgentCharacter, allAgents: AgentCharacter[])
   return closest;
 }
 
+function isHeadingToPos(pos: Position, agents: AgentCharacter[], excludeId: string): boolean {
+  return agents.some(a => {
+    if (a.id === excludeId) return false;
+    if (a.path.length > 0) {
+      const dest = a.path[a.path.length - 1];
+      return dest.x === pos.x && dest.y === pos.y;
+    }
+    return a.gridPos.x === pos.x && a.gridPos.y === pos.y;
+  });
+}
+
 function getAdjacentPosition(a: Position, b: Position): Position {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -140,6 +173,7 @@ function getAdjacentPosition(a: Position, b: Position): Position {
 
 function decideNextAction(agent: AgentCharacter, allAgents: AgentCharacter[]): BehaviorDecision {
   const { energy, caffeine, social } = agent.needs;
+  const threshold = agentThreshold(agent.id);
 
   const needsList: { need: string; value: number }[] = [
     { need: 'energy', value: energy },
@@ -148,15 +182,26 @@ function decideNextAction(agent: AgentCharacter, allAgents: AgentCharacter[]): B
   ];
 
   const urgentNeeds = needsList
-    .filter(n => n.value < NEED_THRESHOLD)
+    .filter(n => n.value < threshold)
     .sort((a, b) => a.value - b.value);
+
+  // 隨機猶豫：有時即使需求低也多待一個 tick，避免所有人同時動作
+  if (urgentNeeds.length > 0 && Math.random() < agentHesitation(agent.id)) {
+    return { action: 'stay', status: agent.status === 'idle' ? 'working' : agent.status };
+  }
 
   if (urgentNeeds.length > 0) {
     const mostUrgent = urgentNeeds[0].need;
 
     switch (mostUrgent) {
       case 'energy': {
-        const spot = OFFICE_LOCATIONS.sofaArea[Math.floor(Math.random() * OFFICE_LOCATIONS.sofaArea.length)];
+        const availableSpots = OFFICE_LOCATIONS.sofaArea.filter(
+          s => !isHeadingToPos(s, allAgents, agent.id)
+        );
+        if (availableSpots.length === 0) {
+          return { action: 'stay', status: 'working' };
+        }
+        const spot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
         return {
           action: 'move',
           targetPos: spot,
@@ -165,7 +210,20 @@ function decideNextAction(agent: AgentCharacter, allAgents: AgentCharacter[]): B
           emojiBubble: '💤'
         };
       }
-      case 'caffeine':
+      case 'caffeine': {
+        if (isHeadingToPos(OFFICE_LOCATIONS.coffeeMachine, allAgents, agent.id)) {
+          // 咖啡機被佔用，退而求其次：喝水或忍耐
+          if (!isHeadingToPos(OFFICE_LOCATIONS.waterCooler, allAgents, agent.id)) {
+            return {
+              action: 'move',
+              targetPos: OFFICE_LOCATIONS.waterCooler,
+              status: 'walking',
+              activityDuration: 2000,
+              emojiBubble: '💧'
+            };
+          }
+          return { action: 'stay', status: 'working' };
+        }
         return {
           action: 'move',
           targetPos: OFFICE_LOCATIONS.coffeeMachine,
@@ -173,6 +231,7 @@ function decideNextAction(agent: AgentCharacter, allAgents: AgentCharacter[]): B
           activityDuration: COFFEE_DURATION_MS,
           emojiBubble: '☕'
         };
+      }
       case 'social': {
         const colleague = findNearbyColleague(agent, allAgents);
         if (colleague) {
@@ -186,13 +245,16 @@ function decideNextAction(agent: AgentCharacter, allAgents: AgentCharacter[]): B
             actionTargetId: colleague.id
           };
         }
-        return {
-          action: 'move',
-          targetPos: OFFICE_LOCATIONS.waterCooler,
-          status: 'walking',
-          activityDuration: WATER_COOLER_DURATION_MS,
-          emojiBubble: '💧'
-        };
+        if (!isHeadingToPos(OFFICE_LOCATIONS.waterCooler, allAgents, agent.id)) {
+          return {
+            action: 'move',
+            targetPos: OFFICE_LOCATIONS.waterCooler,
+            status: 'walking',
+            activityDuration: WATER_COOLER_DURATION_MS,
+            emojiBubble: '💧'
+          };
+        }
+        return { action: 'stay', status: 'working' };
       }
     }
   }
