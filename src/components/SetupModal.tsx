@@ -13,6 +13,8 @@ export interface RoleSetupConfig {
   baseUrl?: string;
   model?: string;
   sdk?: string;
+  userRole?: RoleType;
+  userName?: string;
 }
 
 interface SetupModalProps {
@@ -64,23 +66,37 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
 
   const providers = getProviderList();
   const [selectedProviderId, setSelectedProviderId] = useState<string>(() => loadSavedProvider() || '');
+  const [resolvedProvider, setResolvedProvider] = useState<string>('');
+  const [resolvedLabel, setResolvedLabel] = useState<string>('');
   const [apiKey, setApiKey] = useState<string>('');
   const [baseUrl, setBaseUrl] = useState<string>('');
   const [model, setModel] = useState<string>('');
   const [sdk, setSdk] = useState<string>('');
+  const [userRole, setUserRole] = useState<RoleType | null>(null);
+  const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
-    initModelConfig().then(() => {
+    let cancelled = false;
+    const load = async () => {
+      const resolved = await initModelConfig({ retry: true });
+      if (cancelled) return;
+
       const saved = loadSavedProvider();
-      const resolved = resolveModel();
-      const validIds = new Set(['mock', resolved.provider].filter(Boolean));
+      const resolvedModel = resolveModel();
+
+      setResolvedProvider(resolvedModel.provider);
+      setResolvedLabel(resolvedModel.label);
+
+      const validIds = new Set(['mock', resolvedModel.provider].filter(Boolean));
 
       if (saved && validIds.has(saved)) {
         setSelectedProviderId(saved);
       } else {
-        setSelectedProviderId(resolved.provider || 'mock');
+        setSelectedProviderId(resolvedModel.provider || 'mock');
       }
-    });
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -96,13 +112,13 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
   useEffect(() => {
     const provDef = getProviderById(selectedProviderId);
     if (provDef) {
-      const resolved = resolveModel();
       setApiKey(provDef.apiKey);
       setBaseUrl(provDef.baseURL);
+      const resolved = resolveModel();
       setModel(selectedProviderId === resolved.provider && resolved.model ? resolved.model : provDef.defaultModel);
       setSdk(provDef.sdk);
     }
-  }, [selectedProviderId]);
+  }, [selectedProviderId, resolvedProvider]);
 
   if (!isOpen) return null;
 
@@ -144,7 +160,9 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
       apiKey,
       baseUrl,
       model,
-      sdk
+      sdk,
+      userRole: userRole || undefined,
+      userName: userName || undefined
     });
   };
 
@@ -194,49 +212,93 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
               {(Object.keys(ROLE_CONFIGS) as RoleType[]).map(roleKey => {
                 const role = ROLE_CONFIGS[roleKey];
                 const count = counts[roleKey];
+                const isUserRole = userRole === roleKey;
 
                 return (
                   <div
                     key={roleKey}
-                    className={`p-3 rounded border transition flex items-center justify-between ${
-                      count > 0
+                    className={`p-3 rounded border transition min-w-0 overflow-hidden ${
+                      count > 0 || isUserRole
                         ? 'bg-slate-900 border-amber-500/50'
                         : 'bg-slate-950/50 border-slate-800 opacity-60'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-9 h-9 rounded border border-amber-400/80 flex items-center justify-center font-bold text-white text-xs font-mono shadow flex-shrink-0"
-                        style={{ backgroundColor: role.avatarColor }}
-                      >
-                        {ROLE_SHORT_CODES[roleKey]}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-9 h-9 rounded border border-amber-400/80 flex items-center justify-center font-bold text-white text-xs font-mono shadow flex-shrink-0"
+                          style={{ backgroundColor: role.avatarColor }}
+                        >
+                          {ROLE_SHORT_CODES[roleKey]}
+                        </div>
+                        <div className="min-w-0">
+                          <div
+                            className="text-sm font-bold text-slate-100 font-sans tracking-wide"
+                            style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          >{role.name}</div>
+                          <div className="text-[11px] text-slate-400 font-sans mt-0.5">{role.title}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-sm font-bold text-slate-100 font-sans tracking-wide">{role.name}</div>
-                        <div className="text-xs text-slate-400 font-sans mt-0.5">{role.title}</div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="flex items-center gap-1.5 bg-slate-950 px-1.5 py-1 border border-slate-800 rounded">
+                          <button
+                            type="button"
+                            onClick={() => handleCountChange(roleKey, -1)}
+                            className="w-5 h-5 rounded bg-slate-800 text-amber-400 hover:bg-slate-700 font-bold text-xs flex items-center justify-center"
+                          >
+                            -
+                          </button>
+                          <span className="w-5 text-center font-mono font-bold text-amber-300 text-xs">
+                            {count}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCountChange(roleKey, 1)}
+                            className="w-5 h-5 rounded bg-slate-800 text-amber-400 hover:bg-slate-700 font-bold text-xs flex items-center justify-center"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            soundManager.playSelectSound();
+                            if (isUserRole) {
+                              setUserRole(null);
+                              setUserName('');
+                            } else {
+                              setUserRole(roleKey);
+                              setUserName('');
+                            }
+                          }}
+                          className={`w-7 h-7 rounded border text-xs flex items-center justify-center transition flex-shrink-0 ${
+                            isUserRole
+                              ? 'bg-amber-400 text-slate-950 border-amber-500'
+                              : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-amber-500/50 hover:text-amber-400'
+                          }`}
+                          title={isUserRole ? '取消扮演' : '扮演此角色'}
+                        >
+                          👤
+                        </button>
                       </div>
                     </div>
 
-                    {/* 人數計數器 */}
-                    <div className="flex items-center gap-2 bg-slate-950 px-2 py-1 border border-slate-800 rounded">
-                      <button
-                        type="button"
-                        onClick={() => handleCountChange(roleKey, -1)}
-                        className="w-6 h-6 rounded bg-slate-800 text-amber-400 hover:bg-slate-700 font-bold text-sm flex items-center justify-center"
-                      >
-                        -
-                      </button>
-                      <span className="w-6 text-center font-mono font-bold text-amber-300 text-sm">
-                        {count}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleCountChange(roleKey, 1)}
-                        className="w-6 h-6 rounded bg-slate-800 text-amber-400 hover:bg-slate-700 font-bold text-sm flex items-center justify-center"
-                      >
-                        +
-                      </button>
-                    </div>
+                    {isUserRole && (
+                      <div className="mt-2 flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] text-amber-400 font-mono whitespace-nowrap flex-shrink-0">暱稱：</span>
+                        <input
+                          type="text"
+                          value={userName}
+                          onChange={e => setUserName(e.target.value)}
+                          placeholder={role.name}
+                          maxLength={12}
+                          className="flex-1 min-w-0 bg-slate-950 border border-amber-500/40 rounded px-2 py-1 text-xs text-slate-100 font-mono outline-none focus:border-amber-400 placeholder-slate-600"
+                          style={{ minWidth: 0 }}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -250,9 +312,8 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
 
               <div className="grid grid-cols-2 gap-2">
                 {(() => {
-                  const resolved = resolveModel();
                   const visibleProviders = providers.filter(p =>
-                    p.id === 'mock' || (resolved.provider && p.id === resolved.provider)
+                    p.id === 'mock' || (resolvedProvider && p.id === resolvedProvider)
                   );
 
                   return visibleProviders.map(prov => {
@@ -260,7 +321,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                     const isMock = prov.id === 'mock';
                     const title = isMock
                       ? 'Mock AI'
-                      : (resolved.label || `${resolved.provider}/${resolved.model}`);
+                      : (resolvedLabel || `${resolvedProvider}/${prov.defaultModel}`);
 
                     return (
                       <button

@@ -247,6 +247,17 @@ input {
 .transition { transition: all 0.15s ease-in-out; }
 .overflow-hidden { overflow: hidden; }
 .overflow-y-auto { overflow-y: auto; }
+
+/* Text truncation utilities */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.whitespace-nowrap { white-space: nowrap; }
+
+/* Min-width utilities */
+.min-w-0 { min-width: 0px; }
 .touch-none { touch-action: none; }
 .select-none { user-select: none; -webkit-user-select: none; }
 .cursor-pointer { cursor: pointer; }
@@ -320,6 +331,11 @@ input {
 .animate-bounce { animation: bounce 1s infinite; }
 .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 .animate-dice-roll { animation: diceRoll 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.animate-spin { animation: spin 1s linear infinite; }
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

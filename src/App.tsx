@@ -20,6 +20,7 @@ export const App: React.FC = () => {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [activeDialogue, setActiveDialogue] = useState<ChatMessage | null>(null);
+  const [userTurnPending, setUserTurnPending] = useState<AgentCharacter | null>(null);
 
   const [isSetupOpen, setIsSetupOpen] = useState(true);
   const [isTopicOpen, setIsTopicOpen] = useState(false);
@@ -39,13 +40,28 @@ export const App: React.FC = () => {
     provider: 'mock'
   });
 
+  const [aiTakeover, setAiTakeover] = useState<boolean>(false);
+  const aiTakeoverRef = useRef<boolean>(false);
+  const [roundsExhausted, setRoundsExhausted] = useState<boolean>(false);
+
+  useEffect(() => {
+    aiTakeoverRef.current = aiTakeover;
+  }, [aiTakeover]);
+
   const lastDialogueTime = useRef<number>(Date.now());
+  const dialogueRoundCount = useRef<number>(0);
   const isGeneratingRef = useRef<boolean>(false);
   const activeDialogueRef = useRef<boolean>(false);
+  const userTurnPendingRef = useRef<boolean>(false);
+  const [isBusyGenerating, setIsBusyGenerating] = useState<boolean>(false);
 
   useEffect(() => {
     activeDialogueRef.current = activeDialogue !== null;
   }, [activeDialogue]);
+
+  useEffect(() => {
+    userTurnPendingRef.current = userTurnPending !== null;
+  }, [userTurnPending]);
 
   // 1. 第一階段：初始化團隊角色與 Provider，並開啟 TopicModal 選擇主題
   const handleStartSetup = (config: RoleSetupConfig) => {
@@ -72,11 +88,15 @@ export const App: React.FC = () => {
 
     (Object.keys(pendingConfig.counts) as RoleType[]).forEach(role => {
       const count = pendingConfig.counts[role];
+      const isUserRole = role === pendingConfig.userRole;
       for (let i = 0; i < count; i++) {
         const deskPos = OFFICE_LOCATIONS.desks[deskIdx % OFFICE_LOCATIONS.desks.length] || { x: 5, y: 5 };
         deskIdx++;
 
-        const agentName = `${role}_${i + 1}`;
+        const isUserAgent = isUserRole && i === 0;
+        const agentName = isUserAgent
+          ? (pendingConfig.userName || `${role}_${i + 1}`)
+          : `${role}_${i + 1}`;
         newAgents.push({
           id: `${role}_${i}_${Date.now()}`,
           name: agentName,
@@ -91,6 +111,7 @@ export const App: React.FC = () => {
           speechBubble: null,
           speechTimer: 0,
           deskPos: { ...deskPos },
+          isUser: isUserAgent,
           stats: {
             stress: Math.floor(Math.random() * 40 + 20),
             coffeeLevel: Math.floor(Math.random() * 50 + 50),
@@ -102,6 +123,8 @@ export const App: React.FC = () => {
 
     setAgents(newAgents);
     setIsTopicOpen(false);
+    dialogueRoundCount.current = 0;
+    setRoundsExhausted(false);
 
     // 遊戲啟動宣告開場主題 (由 Boss 或 PM 進行開場引言)
     setTimeout(() => {
@@ -132,36 +155,66 @@ export const App: React.FC = () => {
       const rand = Math.random();
 
       const { goCoffee, visitColleague } = loopConfig.behaviorWeights;
+      const goSofa = 0.15;
+      const goWhiteboard = 0.10;
+      const goWaterCooler = 0.15;
 
       if (rand < goCoffee) {
-        // 去咖啡機
-        const path = findPath(map, randomAgent.gridPos, OFFICE_LOCATIONS.coffeeMachine);
-        if (path.length > 0) {
-          updateAgentPath(randomAgent.id, path, 'coffee');
+        const distToCoffee = Math.abs(randomAgent.gridPos.x - OFFICE_LOCATIONS.coffeeMachine.x) +
+                             Math.abs(randomAgent.gridPos.y - OFFICE_LOCATIONS.coffeeMachine.y);
+        if (distToCoffee > 2) {
+          const path = findPath(map, randomAgent.gridPos, OFFICE_LOCATIONS.coffeeMachine);
+          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'coffee');
         }
       } else if (rand < goCoffee + visitColleague) {
-        // 去找另一位同事聊聊
         const otherAgents = agents.filter(a => a.id !== randomAgent.id);
         if (otherAgents.length > 0) {
           const colleague = otherAgents[Math.floor(Math.random() * otherAgents.length)];
           const path = findPath(map, randomAgent.gridPos, colleague.gridPos);
-          if (path.length > 0) {
-            updateAgentPath(randomAgent.id, path, 'walking');
-          }
+          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'walking');
+        }
+      } else if (rand < goCoffee + visitColleague + goSofa) {
+        const spot = OFFICE_LOCATIONS.sofaArea[Math.floor(Math.random() * OFFICE_LOCATIONS.sofaArea.length)];
+        const dist = Math.abs(randomAgent.gridPos.x - spot.x) + Math.abs(randomAgent.gridPos.y - spot.y);
+        if (dist > 1) {
+          const path = findPath(map, randomAgent.gridPos, spot);
+          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'walking');
+        }
+      } else if (rand < goCoffee + visitColleague + goSofa + goWhiteboard) {
+        const dist = Math.abs(randomAgent.gridPos.x - OFFICE_LOCATIONS.whiteboard.x) +
+                     Math.abs(randomAgent.gridPos.y - OFFICE_LOCATIONS.whiteboard.y);
+        if (dist > 1) {
+          const path = findPath(map, randomAgent.gridPos, OFFICE_LOCATIONS.whiteboard);
+          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'walking');
+        }
+      } else if (rand < goCoffee + visitColleague + goSofa + goWhiteboard + goWaterCooler) {
+        const dist = Math.abs(randomAgent.gridPos.x - OFFICE_LOCATIONS.waterCooler.x) +
+                     Math.abs(randomAgent.gridPos.y - OFFICE_LOCATIONS.waterCooler.y);
+        if (dist > 1) {
+          const path = findPath(map, randomAgent.gridPos, OFFICE_LOCATIONS.waterCooler);
+          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'walking');
         }
       }
 
       // 自動觸發對話 (帶入當前辦公室主題與 config.json 設定)
       const { minIntervalMs, chance } = loopConfig.dialogueTrigger;
+      const maxReached = loopConfig.maxDialogueRounds && loopConfig.maxDialogueRounds > 0 && dialogueRoundCount.current >= loopConfig.maxDialogueRounds;
+
       if (
         now - lastDialogueTime.current > minIntervalMs &&
         Math.random() < chance &&
         !isGeneratingRef.current &&
-        !activeDialogueRef.current
+        !activeDialogueRef.current &&
+        !userTurnPendingRef.current &&
+        !maxReached
       ) {
         lastDialogueTime.current = now;
-        const speaker = agents[Math.floor(Math.random() * agents.length)];
+        const nonUserAgents = agents.filter(a => !a.isUser);
+        if (nonUserAgents.length === 0) return;
+        const speaker = nonUserAgents[Math.floor(Math.random() * nonUserAgents.length)];
         triggerAgentSpeech(speaker, currentTopic);
+      } else if (maxReached && !activeDialogueRef.current && !userTurnPendingRef.current && !isGeneratingRef.current) {
+        setRoundsExhausted(true);
       }
     }, loopConfig.heartbeatIntervalMs);
 
@@ -179,18 +232,28 @@ export const App: React.FC = () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
     const totalPeople = agents.length;
+    const loopCfg = getGameLoopConfig();
+    const maxRounds = loopCfg.maxDialogueRounds || 0;
+    const remaining = maxRounds > 0 ? Math.max(0, maxRounds - dialogueRoundCount.current) : -1;
 
     const members = agents.map(a => {
       const roleCfg = ROLE_CONFIGS[a.role];
-      return `- [${a.role}] ${a.name}：${roleCfg?.title || a.role}`;
+      const userMark = a.isUser ? ' 👤' : '';
+      return `- [${a.role}] ${a.name}：${roleCfg?.title || a.role}${userMark}`;
     }).join('\n');
 
-    return { time: timeStr, totalPeople, members, topic };
+    return { time: timeStr, totalPeople, members, topic, roundNumber: dialogueRoundCount.current + 1, maxRounds, remaining };
   };
 
   const triggerAgentSpeech = async (speaker: AgentCharacter, topic?: string) => {
     if (isGeneratingRef.current) return;
+    if (speaker.isUser && !aiTakeoverRef.current) {
+      setUserTurnPending(speaker);
+      userTurnPendingRef.current = true;
+      return;
+    }
     isGeneratingRef.current = true;
+    setIsBusyGenerating(true);
 
     try {
       const text = await fetchLLMResponse(
@@ -201,6 +264,8 @@ export const App: React.FC = () => {
         topic,
         buildSceneData(topic)
       );
+      dialogueRoundCount.current++;
+
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
       const newMsg: ChatMessage = {
@@ -223,11 +288,86 @@ export const App: React.FC = () => {
 
       setChatMessages(prev => [...prev, newMsg]);
       setActiveDialogue(newMsg);
+      activeDialogueRef.current = true;
 
       soundManager.playTextBleep(600);
     } finally {
       isGeneratingRef.current = false;
+      setIsBusyGenerating(false);
     }
+  };
+
+  const advanceConversation = (speakerId: string, speakerText: string) => {
+    const loopCfg = getGameLoopConfig();
+    const maxRounds = loopCfg.maxDialogueRounds ?? 0;
+    if (maxRounds > 0 && dialogueRoundCount.current >= maxRounds) {
+      setRoundsExhausted(true);
+      return;
+    }
+
+    const topic = meetingState.topic || currentTopic;
+    lastDialogueTime.current = Date.now();
+
+    const nominee = parseNomination(speakerText);
+    if (nominee && nominee.id !== speakerId) {
+      if (nominee.isUser) {
+        if (aiTakeoverRef.current) {
+          triggerAgentSpeech(nominee, topic);
+          return;
+        }
+        setActiveDialogue(null);
+        activeDialogueRef.current = false;
+        setUserTurnPending(nominee);
+        userTurnPendingRef.current = true;
+        return;
+      }
+      triggerAgentSpeech(nominee, topic);
+      return;
+    }
+
+    const nextSpeaker = findNextSpeaker(speakerId, topic);
+    if (nextSpeaker) {
+      if (nextSpeaker.isUser) {
+        setActiveDialogue(null);
+        activeDialogueRef.current = false;
+        setUserTurnPending(nextSpeaker);
+        userTurnPendingRef.current = true;
+        return;
+      }
+      triggerAgentSpeech(nextSpeaker, topic);
+    }
+  };
+
+  const handleUserReply = (text: string) => {
+    if (!userTurnPending) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const newMsg: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      speakerId: userTurnPending.id,
+      speakerName: userTurnPending.name,
+      speakerRole: userTurnPending.role,
+      text: trimmed,
+      timestamp: timeStr,
+      isMeeting: meetingState.isActive
+    };
+
+    setAgents(prev =>
+      prev.map(a =>
+        a.id === userTurnPending.id
+          ? { ...a, speechBubble: trimmed, speechTimer: 4, direction: 'down' }
+          : a
+      )
+    );
+
+    setChatMessages(prev => [...prev, newMsg]);
+    setUserTurnPending(null);
+    userTurnPendingRef.current = false;
+    soundManager.playTextBleep(600);
+
+    advanceConversation(userTurnPending.id, trimmed);
   };
 
   // 4. 召開全體會議 (Call Meeting)
@@ -286,26 +426,52 @@ export const App: React.FC = () => {
     handleDispatchTask(eventTopic);
   };
 
-  // 7. 解析 AI 回覆中的點名 @Role
+  // 7. 解析 AI 回覆中的點名 @Role 或 @Name（使用者扮演角色優先匹配）
   const parseNomination = (text: string): AgentCharacter | null => {
     const roleAliases: Record<string, RoleType> = {
       'PM': 'PM', 'RD': 'RD', 'QA': 'QA', 'UIUX': 'UIUX', 'UI': 'UIUX',
       'AD': 'AD', 'INTERN': 'INTERN', 'BOSS': 'BOSS',
     };
-    const match = text.match(/@(PM|RD|QA|UIUX|UI|AD|INTERN|BOSS)\b/i);
-    if (match) {
-      const mappedRole = roleAliases[match[1].toUpperCase()] || match[1].toUpperCase() as RoleType;
+    const match = text.match(/@(\S+?)(?:\s|$|[,，。.、!！?？]|$)/);
+    if (!match) return null;
+
+    const rawToken = match[1];
+    const upperToken = rawToken.toUpperCase();
+
+    const pickUserFirst = (candidates: AgentCharacter[]) => {
+      const userAgents = candidates.filter(a => a.isUser);
+      if (userAgents.length > 0) {
+        return userAgents[Math.floor(Math.random() * userAgents.length)];
+      }
+      return candidates[Math.floor(Math.random() * candidates.length)];
+    };
+
+    const mappedRole = roleAliases[upperToken];
+    if (mappedRole) {
       const candidates = agents.filter(a => a.role === mappedRole);
-      if (candidates.length > 0) {
-        return candidates[Math.floor(Math.random() * candidates.length)];
+      if (candidates.length > 0) return pickUserFirst(candidates);
+    }
+
+    const rolePrefix = upperToken.match(/^([A-Z]+)/);
+    if (rolePrefix) {
+      const extracted = roleAliases[rolePrefix[1]];
+      if (extracted) {
+        const candidates = agents.filter(a => a.role === extracted);
+        if (candidates.length > 0) return pickUserFirst(candidates);
       }
     }
+
+    const byName = agents.find(a =>
+      a.name === rawToken || a.name.toUpperCase() === upperToken
+    );
+    if (byName) return byName;
+
     return null;
   };
 
   // 8. 舉手機制：根據主題關鍵詞 + 最近發言紀錄計算各角色發言優先級
   const findNextSpeaker = (currentSpeakerId: string, topic: string): AgentCharacter | null => {
-    const otherAgents = agents.filter(a => a.id !== currentSpeakerId);
+    const otherAgents = agents.filter(a => a.id !== currentSpeakerId && !a.isUser);
     if (otherAgents.length === 0) return null;
 
     const recentSpeakerIds = chatMessages.slice(-3).map(m => m.speakerId);
@@ -369,24 +535,108 @@ export const App: React.FC = () => {
       {/* 勇者鬥惡龍 經典打字機對話框 */}
       <DialogueBox
         message={activeDialogue}
-        onNext={() => {
-          if (!activeDialogue) return;
-          const topic = meetingState.topic || currentTopic;
-          lastDialogueTime.current = Date.now();
-
-          const nominee = parseNomination(activeDialogue.text);
-          if (nominee && nominee.id !== activeDialogue.speakerId) {
-            triggerAgentSpeech(nominee, topic);
-            return;
-          }
-
-          const nextSpeaker = findNextSpeaker(activeDialogue.speakerId, topic);
-          if (nextSpeaker) {
-            triggerAgentSpeech(nextSpeaker, topic);
+        userTurn={userTurnPending}
+        onUserReply={handleUserReply}
+        isBusy={isBusyGenerating}
+        aiTakeover={aiTakeover}
+        onToggleAiTakeover={() => {
+          const newState = !aiTakeover;
+          setAiTakeover(newState);
+          aiTakeoverRef.current = newState;
+          if (newState && userTurnPending) {
+            const pending = userTurnPending;
+            setUserTurnPending(null);
+            userTurnPendingRef.current = false;
+            triggerAgentSpeech(pending, meetingState.topic || currentTopic);
           }
         }}
-        onClose={() => setActiveDialogue(null)}
+        autoAdvanceMs={
+          activeDialogue
+            ? parseNomination(activeDialogue.text)?.isUser
+              ? (aiTakeover ? 1500 : undefined)
+              : getGameLoopConfig().autoAdvanceMs
+            : undefined
+        }
+        nextLabel={
+          activeDialogue
+            ? (() => {
+                const mention = parseNomination(activeDialogue.text);
+                if (!mention || !mention.isUser) return undefined;
+                return aiTakeover ? 'AI 自動回覆' : '換你回覆';
+              })()
+            : undefined
+        }
+        onNext={() => {
+          if (!activeDialogue) return;
+          advanceConversation(activeDialogue.speakerId, activeDialogue.text);
+        }}
+        onClose={() => {
+          setActiveDialogue(null);
+          activeDialogueRef.current = false;
+          setUserTurnPending(null);
+          userTurnPendingRef.current = false;
+        }}
       />
+
+      {roundsExhausted && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 80,
+            pointerEvents: 'auto'
+          }}
+          className="flex flex-col items-center gap-3 px-6 py-4 bg-slate-900 border-2 border-amber-400 rounded shadow-2xl"
+        >
+          <p className="text-amber-400 font-mono font-bold text-sm">
+            對話已達設定上限（{getGameLoopConfig().maxDialogueRounds} 輪）
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setRoundsExhausted(false);
+                dialogueRoundCount.current = 0;
+              }}
+              className="px-4 py-1.5 text-xs font-mono font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 border border-amber-500 rounded transition"
+            >
+              重置計數，繼續對話
+            </button>
+            <button
+              onClick={() => {
+                setRoundsExhausted(false);
+                setIsSetupOpen(true);
+              }}
+              className="px-4 py-1.5 text-xs font-mono text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition"
+            >
+              重新開始
+            </button>
+          </div>
+        </div>
+      )}
+
+      {aiTakeover && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            left: '16px',
+            zIndex: 70,
+            pointerEvents: 'auto'
+          }}
+          className="flex items-center gap-2 px-3 py-1.5 bg-yellow-400 border-2 border-yellow-300 rounded text-xs font-mono font-bold text-black shadow-lg shadow-yellow-400/30"
+        >
+          <span className="inline-block w-2 h-2 bg-black rounded-full animate-pulse" />
+          AI 接管中
+          <button
+            onClick={() => setAiTakeover(false)}
+            className="ml-1 px-2 py-0.5 bg-black text-yellow-400 rounded text-[10px] hover:bg-slate-800 transition"
+          >
+            切回手動
+          </button>
+        </div>
+      )}
 
       {/* 側邊歷史紀錄抽屜 */}
       <ChatLog

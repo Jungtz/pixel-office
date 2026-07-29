@@ -46,6 +46,7 @@ export interface AgentCharacter {
   speechBubble: string | null;
   speechTimer: number;
   deskPos: Position;
+  isUser?: boolean;
   stats: {
     stress: number; // 0 ~ 100
     coffeeLevel: number; // 0 ~ 100

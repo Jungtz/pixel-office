@@ -11,6 +11,7 @@ export const OFFICE_LOCATIONS = {
     { x: 16, y: 5 }, { x: 17, y: 5 }, { x: 18, y: 5 }, { x: 19, y: 5 }
   ],
   coffeeMachine: { x: 2, y: 2 },
+  waterCooler: { x: 3, y: 1 },
   whiteboard: { x: 18, y: 1 },
   sofaArea: [{ x: 2, y: 13 }, { x: 3, y: 13 }, { x: 4, y: 13 }],
   bossDesk: { x: 20, y: 12 },
