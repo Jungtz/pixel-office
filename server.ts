@@ -82,7 +82,7 @@ app.get('/api/providers', (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (從 src/prompts/*.md 載入人設)
+ * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (支援角色發言與 🎲 AI 主題自動發想)
  */
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
@@ -90,39 +90,59 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     const config = loadConfig();
     const provider = config.providers?.[providerId];
 
+    const isTopicGen = speakerRole === 'TOPIC' || speakerName === 'TopicGenerator';
+
     if (!provider || providerId === 'mock' || !provider.apiKey) {
-      console.log(`[LLM Call] Mode: Mock AI | Speaker: ${speakerName} (${speakerRole})`);
+      console.log(`[LLM Call] Mode: Mock AI | Type: ${isTopicGen ? '🎲 Topic Gen' : '💬 Dialogue'} | Speaker: ${speakerName}`);
       return res.json({ status: 'mock' });
     }
 
-    const basePrompt = loadRolePrompt(speakerRole);
-    const systemPrompt = `${basePrompt} 你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。`;
-    const messagesPayload = [
-      { role: 'system', content: systemPrompt },
-      ...(contextMessages || []).slice(-5).map((m: any) => ({
-        role: m.speakerRole === speakerRole ? 'assistant' : 'user',
-        content: `${m.speakerName} (${m.speakerRole}): ${m.text}`
-      }))
-    ];
+    let systemPrompt = '';
+    let messagesPayload: any[] = [];
 
-    if (topic) {
-      messagesPayload.push({
-        role: 'user',
-        content: `當前辦公室討論主題：${topic}。請發表你的看法。`
-      });
+    if (isTopicGen) {
+      systemPrompt = '你是一名資深的科技公司 CEO。請以繁體中文直接輸出一個 15 字以內的辦公室專案討論主題或緊急任務（例如：客戶極端效能瓶頸處置、準備週五產線 Build 發佈）。直接輸出主題即可，絕不要輸出引號、問候語或任何額外說明。';
+      messagesPayload = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: '請發想並輸出一個全新的辦公室專案討論主題。' }
+      ];
+    } else {
+      const basePrompt = loadRolePrompt(speakerRole);
+      systemPrompt = `${basePrompt} 你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。`;
+      messagesPayload = [
+        { role: 'system', content: systemPrompt },
+        ...(contextMessages || []).slice(-5).map((m: any) => ({
+          role: m.speakerRole === speakerRole ? 'assistant' : 'user',
+          content: `${m.speakerName} (${m.speakerRole}): ${m.text}`
+        }))
+      ];
+
+      if (topic) {
+        messagesPayload.push({
+          role: 'user',
+          content: `當前辦公室討論主題：${topic}。請發表你的看法。`
+        });
+      }
     }
 
     const baseUrl = (provider.baseURL || (provider.sdk === 'ollama' ? 'https://ollama.com' : 'https://api.openai.com/v1')).replace(/\/$/, '');
     const endpoint = provider.sdk === 'ollama' ? `${baseUrl}/api/chat` : `${baseUrl}/chat/completions`;
 
-    // 格式化輸出請求 Log
-    console.log('\n=================== 🤖 LLM Request ===================');
-    console.log(`[Speaker]  : ${speakerName} (${speakerRole})`);
-    console.log(`[Prompt MD]: src/prompts/${speakerRole.toLowerCase()}.md`);
-    console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
-    console.log(`[SDK/Model]: ${provider.sdk} / ${provider.defaultModel}`);
-    console.log(`[Endpoint] : ${endpoint}`);
-    if (topic) console.log(`[Topic]    : ${topic}`);
+    // 格式化 Console Log 輸出
+    if (isTopicGen) {
+      console.log('\n=================== 🎲 AI Topic Generation ===================');
+      console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
+      console.log(`[SDK/Model]: ${provider.sdk} / ${provider.defaultModel}`);
+      console.log(`[Endpoint] : ${endpoint}`);
+    } else {
+      console.log('\n=================== 🤖 LLM Request ===================');
+      console.log(`[Speaker]  : ${speakerName} (${speakerRole})`);
+      console.log(`[Prompt MD]: src/prompts/${speakerRole.toLowerCase()}.md`);
+      console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
+      console.log(`[SDK/Model]: ${provider.sdk} / ${provider.defaultModel}`);
+      console.log(`[Endpoint] : ${endpoint}`);
+      if (topic) console.log(`[Topic]    : ${topic}`);
+    }
 
     let response: any;
     if (provider.sdk === 'ollama') {
@@ -164,9 +184,15 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
     const text = data.message?.content || data.choices?.[0]?.message?.content;
     if (text && typeof text === 'string') {
-      console.log(`[LLM Response]: "${text.trim()}"`);
-      console.log('=========================================================\n');
-      return res.json({ status: 'success', text: text.trim() });
+      const cleanResult = text.replace(/["「」]/g, '').trim();
+      if (isTopicGen) {
+        console.log(`[AI Topic Result]: "${cleanResult}"`);
+        console.log('=========================================================\n');
+      } else {
+        console.log(`[LLM Response]   : "${cleanResult}"`);
+        console.log('=========================================================\n');
+      }
+      return res.json({ status: 'success', text: cleanResult });
     } else {
       console.warn(`[LLM Warning]: API 尚未回傳有效文字或包含錯誤內容。`);
       console.warn(`[Raw Data]   : ${resText.substring(0, 250)}`);

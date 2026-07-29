@@ -38,6 +38,8 @@ export const TopicModal: React.FC<TopicModalProps> = ({
       setIsRolling(false);
     }, 600);
 
+    console.log(`[Client Topic Generator] Rolling AI Topic via Provider: "${llmConfig.provider}"...`);
+
     try {
       if (llmConfig.provider !== 'mock') {
         const res = await fetch('/api/chat', {
@@ -45,17 +47,16 @@ export const TopicModal: React.FC<TopicModalProps> = ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             providerId: llmConfig.provider,
-            speakerRole: 'BOSS',
-            speakerName: 'System',
-            topic: '請產生一個繁體中文 15 字以內的科技公司辦公室專案討論主題（例如：客戶緊急反饋效能瓶頸處置、準備週五封版發佈）。直接輸出主題名稱即可，不要輸出任何額外說明與引號。'
+            speakerRole: 'TOPIC',
+            speakerName: 'TopicGenerator'
           })
         });
-
 
         if (res.ok) {
           const data = await res.json();
           if (data.status === 'success' && data.text) {
             const cleanText = data.text.replace(/["「」]/g, '').trim();
+            console.log(`[Client Topic Generator] Received AI Topic: "${cleanText}"`);
             setTopic(cleanText);
             setIsGenerating(false);
             return;
@@ -63,14 +64,16 @@ export const TopicModal: React.FC<TopicModalProps> = ({
         }
       }
     } catch (err) {
-      console.warn('AI Topic generation failed, fallback to mock generator:', err);
+      console.warn('[Client Topic Generator Error] AI Topic generation failed, fallback to mock generator:', err);
     }
 
     // 隨機動態主題產生器
     const mockTopic = generateMockTopic();
+    console.log(`[Client Topic Generator] Mock Topic Selected: "${mockTopic}"`);
     setTopic(mockTopic);
     setIsGenerating(false);
   };
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
