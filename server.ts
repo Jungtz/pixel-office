@@ -120,7 +120,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       if (topic) {
         messagesPayload.push({
           role: 'user',
-          content: `當前辦公室討論主題是：「${topic}」。請完全以你專屬的職位視角與性格，針對該主題發表你原創的一兩句話看法（絕不要複製或重複他人發言與標題文字）。`
+          content: `當前辦公室討論主題是：「${topic}」。請完全以你專屬的職位視角與性格，針對該主題發表你原創的一兩句話看法（絕不要複製或重複他人發言與標題文字）。若認為某個職位的人特別適合接續回應，可在結尾加上 @PM、@RD、@QA 等點名。`
         });
       }
 

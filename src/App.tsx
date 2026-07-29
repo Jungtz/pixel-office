@@ -252,6 +252,60 @@ export const App: React.FC = () => {
     handleDispatchTask(eventTopic);
   };
 
+  // 7. 解析 AI 回覆中的點名 @Role
+  const parseNomination = (text: string): AgentCharacter | null => {
+    const roleAliases: Record<string, RoleType> = {
+      'PM': 'PM', 'RD': 'RD', 'QA': 'QA', 'UIUX': 'UIUX', 'UI': 'UIUX',
+      'AD': 'AD', 'INTERN': 'INTERN', 'BOSS': 'BOSS',
+    };
+    const match = text.match(/@(PM|RD|QA|UIUX|UI|AD|INTERN|BOSS)\b/i);
+    if (match) {
+      const mappedRole = roleAliases[match[1].toUpperCase()] || match[1].toUpperCase() as RoleType;
+      const candidates = agents.filter(a => a.role === mappedRole);
+      if (candidates.length > 0) {
+        return candidates[Math.floor(Math.random() * candidates.length)];
+      }
+    }
+    return null;
+  };
+
+  // 8. 舉手機制：根據主題關鍵詞 + 最近發言紀錄計算各角色發言優先級
+  const findNextSpeaker = (currentSpeakerId: string, topic: string): AgentCharacter | null => {
+    const otherAgents = agents.filter(a => a.id !== currentSpeakerId);
+    if (otherAgents.length === 0) return null;
+
+    const recentSpeakerIds = chatMessages.slice(-3).map(m => m.speakerId);
+    const topicLower = topic.toLowerCase();
+
+    const scored = otherAgents.map(agent => {
+      let score = 0;
+
+      if (!recentSpeakerIds.includes(agent.id)) {
+        score += 3;
+      }
+
+      const roleCfg = ROLE_CONFIGS[agent.role];
+      for (const kw of roleCfg.interests) {
+        if (topicLower.includes(kw.toLowerCase())) {
+          score += 2;
+          break;
+        }
+      }
+
+      score += Math.random() * 2;
+
+      return { agent, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    if (scored[0].score > 2) {
+      return scored[0].agent;
+    }
+
+    return otherAgents[Math.floor(Math.random() * otherAgents.length)];
+  };
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950 flex flex-col font-sans select-none">
       
@@ -282,13 +336,18 @@ export const App: React.FC = () => {
       <DialogueBox
         message={activeDialogue}
         onNext={() => {
-          // 隨機讓下一位 Agent 接話
-          const otherAgents = agents.filter(a => a.id !== activeDialogue?.speakerId);
-          if (otherAgents.length > 0) {
-            const nextSpeaker = otherAgents[Math.floor(Math.random() * otherAgents.length)];
-            triggerAgentSpeech(nextSpeaker, meetingState.topic || undefined);
-          } else {
-            setActiveDialogue(null);
+          if (!activeDialogue) return;
+          const topic = meetingState.topic || currentTopic;
+
+          const nominee = parseNomination(activeDialogue.text);
+          if (nominee && nominee.id !== activeDialogue.speakerId) {
+            triggerAgentSpeech(nominee, topic);
+            return;
+          }
+
+          const nextSpeaker = findNextSpeaker(activeDialogue.speakerId, topic);
+          if (nextSpeaker) {
+            triggerAgentSpeech(nextSpeaker, topic);
           }
         }}
         onClose={() => setActiveDialogue(null)}
