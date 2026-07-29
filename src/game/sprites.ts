@@ -1,4 +1,4 @@
-import { Direction, RoleType } from './types';
+import { AgentStatus, Direction, RoleType, AgentNeeds } from './types';
 import { ROLE_CONFIGS } from '../services/roles';
 
 /**
@@ -16,7 +16,8 @@ export function drawCharacterSprite(
   frame: number,
   x: number,
   y: number,
-  size: number
+  size: number,
+  status?: AgentStatus
 ) {
   const config = ROLE_CONFIGS[role];
   ctx.save();
@@ -32,13 +33,25 @@ export function drawCharacterSprite(
   ctx.fill();
 
   // 走路擺腿與微彈跳
+  const isWorkingAnim = status === 'working' && frame % 2 === 1;
   const bounceY = (frame % 2 === 1) ? -1 : 0;
   const legOffset = (frame % 2 === 1) ? 2 : -2;
+  const workArmOffset = isWorkingAnim ? 1 : 0;
 
   // 1. 身體/衣服 (Clothes)
   ctx.fillStyle = config.clothingColor;
   // 軀幹 (Torso)
   ctx.fillRect(10, 16 + bounceY, 12, 10);
+
+  // 工作手臂打字動畫
+  if (status === 'working') {
+    ctx.fillStyle = config.clothingColor;
+    ctx.fillRect(7 + workArmOffset, 17 + bounceY, 3, 2);
+    ctx.fillRect(22 - workArmOffset, 17 + bounceY, 3, 2);
+    ctx.fillStyle = '#ffdfc4';
+    ctx.fillRect(7 + workArmOffset, 19 + bounceY, 2, 2);
+    ctx.fillRect(23 - workArmOffset, 19 + bounceY, 2, 2);
+  }
 
   // 2. 褲子/腿 (Legs)
   ctx.fillStyle = '#1e293b'; // 深色牛仔褲/西裝褲
@@ -121,10 +134,92 @@ export function drawCharacterSprite(
     }
   }
 
+  // 咖啡杯道具（status 為 coffee 時顯示）
+  if (status === 'coffee') {
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(21, 15 + bounceY, 6, 7);
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(21, 16 + bounceY, 6, 1);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(21, 15 + bounceY, 6, 7);
+  }
+
   // 7. DQ 風格邊框細節 (Black Outlines for Pixel Retro Crispness)
   ctx.strokeStyle = '#000000';
   ctx.lineWidth = 1;
   ctx.strokeRect(9, 6 + bounceY, 14, 11);
+
+  ctx.restore();
+}
+
+/**
+ * 繪製角色頭頂 Emoji 氣泡
+ */
+export function drawEmojiBubble(
+  ctx: CanvasRenderingContext2D,
+  emoji: string,
+  x: number,
+  y: number,
+  tileSize: number
+) {
+  ctx.save();
+
+  const bubbleSize = 18;
+  const bx = x + tileSize / 2 - bubbleSize / 2;
+  const by = y - bubbleSize - 6;
+
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  ctx.fillRect(bx, by, bubbleSize, bubbleSize);
+  ctx.strokeStyle = '#eab308';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, bubbleSize, bubbleSize);
+
+  ctx.font = `${bubbleSize - 4}px sans-serif`;
+  ctx.fillStyle = '#f8fafc';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, bx + bubbleSize / 2, by + bubbleSize / 2 + 1);
+
+  ctx.restore();
+}
+
+/**
+ * 繪製需求進度條（能量/咖啡因/社交）
+ */
+export function drawNeedsBar(
+  ctx: CanvasRenderingContext2D,
+  needs: AgentNeeds,
+  x: number,
+  y: number,
+  tileSize: number
+) {
+  ctx.save();
+
+  const barWidth = tileSize + 20;
+  const barHeight = 3;
+  const gap = 1;
+  const totalHeight = barHeight * 3 + gap * 2 + 4;
+  const barX = x - 10;
+  const barY = y + tileSize + 16;
+
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+  ctx.fillRect(barX, barY, barWidth, totalHeight);
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(barX, barY, barWidth, totalHeight);
+
+  const drawBar = (value: number, color: string, offsetY: number) => {
+    const fillWidth = Math.max(0, ((barWidth - 4) * value) / 100);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+    ctx.fillRect(barX + 2, barY + offsetY, barWidth - 4, barHeight);
+    ctx.fillStyle = color;
+    ctx.fillRect(barX + 2, barY + offsetY, fillWidth, barHeight);
+  };
+
+  drawBar(needs.energy, '#ef4444', 2);
+  drawBar(needs.caffeine, '#d97706', 2 + barHeight + gap);
+  drawBar(needs.social, '#3b82f6', 2 + (barHeight + gap) * 2);
 
   ctx.restore();
 }
@@ -275,6 +370,38 @@ export function drawTile(
     ctx.fillRect(8, 2, size - 16, 14);
     ctx.fillStyle = '#e2e8f0'; // 機身
     ctx.fillRect(6, 16, size - 12, 16);
+  }
+  else if (type === 'plant') {
+    // 盆栽裝飾
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 0, size, size);
+
+    // 花盆
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(4, 22, size - 8, 12);
+    ctx.strokeStyle = '#92400e';
+    ctx.strokeRect(4, 22, size - 8, 12);
+
+    // 土壤
+    ctx.fillStyle = '#451a03';
+    ctx.fillRect(5, 22, size - 10, 4);
+
+    // 葉子
+    ctx.fillStyle = '#15803d';
+    ctx.fillRect(8, 10, 8, 14);
+    ctx.fillRect(16, 8, 8, 14);
+    ctx.fillRect(12, 4, 8, 12);
+
+    // 葉片細節
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(10, 8, 4, 6);
+    ctx.fillRect(18, 6, 4, 8);
+
+    // 小花
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillRect(14, 4, 4, 4);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(15, 5, 2, 2);
   }
   else if (type === 'clock') {
     const cx = size / 2;

@@ -1,7 +1,7 @@
 import { AgentCharacter, ChatMessage, TileInfo, Position } from './types';
 import { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } from './officeMap';
-import { drawCharacterSprite, drawTile } from './sprites';
-import { ROLE_CONFIGS } from '../services/roles';
+import { drawCharacterSprite, drawTile, drawEmojiBubble, drawNeedsBar } from './sprites';
+import { getCriticalNeedsEmoji } from './behaviorEngine';
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
@@ -83,6 +83,14 @@ export class GameEngine {
         }
       }
 
+      // 倒數 Emoji 泡泡顯示時間
+      if (agent.emojiTimer > 0) {
+        agent.emojiTimer -= dt;
+        if (agent.emojiTimer <= 0) {
+          agent.emojiBubble = null;
+        }
+      }
+
       // 如果有路徑，持續移動
       if (agent.path.length > 0) {
         agent.status = 'walking';
@@ -110,7 +118,6 @@ export class GameEngine {
           agent.path.shift(); // 移動至下一個節點
 
           if (agent.path.length === 0) {
-            agent.status = 'idle';
             agent.targetPos = null;
           }
         } else {
@@ -121,9 +128,49 @@ export class GameEngine {
           agent.animFrame = Math.floor((performance.now() / 150) % 2);
         }
       } else {
-        agent.animFrame = 0;
+        // 根據狀態決定動畫幀
+        if (agent.status === 'working') {
+          agent.animFrame = Math.floor((performance.now() / 400) % 2);
+        } else if (agent.status === 'resting') {
+          agent.animFrame = Math.floor((performance.now() / 800) % 2);
+        } else if (agent.status === 'coffee') {
+          agent.animFrame = Math.floor((performance.now() / 500) % 2);
+        } else {
+          agent.animFrame = 0;
+        }
       }
     });
+
+    // 互動偵測：相鄰角色自動面對面
+    this.detectInteractions();
+  }
+
+  private detectInteractions() {
+    for (let i = 0; i < this.agents.length; i++) {
+      for (let j = i + 1; j < this.agents.length; j++) {
+        const a = this.agents[i];
+        const b = this.agents[j];
+        const dist = Math.abs(a.gridPos.x - b.gridPos.x) + Math.abs(a.gridPos.y - b.gridPos.y);
+
+        if (dist === 1 && a.path.length === 0 && b.path.length === 0) {
+          if (a.status === 'talking' || b.status === 'talking') {
+            if (a.gridPos.x < b.gridPos.x) {
+              a.direction = 'right';
+              b.direction = 'left';
+            } else if (a.gridPos.x > b.gridPos.x) {
+              a.direction = 'left';
+              b.direction = 'right';
+            } else if (a.gridPos.y < b.gridPos.y) {
+              a.direction = 'down';
+              b.direction = 'up';
+            } else {
+              a.direction = 'up';
+              b.direction = 'down';
+            }
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -189,8 +236,16 @@ export class GameEngine {
         agent.animFrame,
         agent.pixelPos.x,
         agent.pixelPos.y,
-        TILE_SIZE
+        TILE_SIZE,
+        agent.status
       );
+
+      // Emoji 泡泡（狀態表情，在名字上方）
+      const criticalEmoji = getCriticalNeedsEmoji(agent.needs);
+      const displayEmoji = agent.emojiBubble || criticalEmoji;
+      if (displayEmoji && !agent.speechBubble) {
+        drawEmojiBubble(ctx, displayEmoji, agent.pixelPos.x, agent.pixelPos.y, TILE_SIZE);
+      }
 
       // 角色名稱與職稱標籤
       ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
@@ -204,7 +259,15 @@ export class GameEngine {
         agent.pixelPos.y + TILE_SIZE + 13
       );
 
-      // 4. 頭頂 Speech Bubble
+      // 需求進度條（選中角色或需求危急時顯示）
+      const showNeedsBar = agent.id === this.selectedAgentId ||
+        agent.needs.energy < 20 || agent.needs.caffeine < 20 || agent.needs.social < 20;
+
+      if (showNeedsBar && agent.needs) {
+        drawNeedsBar(ctx, agent.needs, agent.pixelPos.x, agent.pixelPos.y, TILE_SIZE);
+      }
+
+      // 頭頂 Speech Bubble
       if (agent.speechBubble) {
         this.drawSpeechBubble(
           ctx,
