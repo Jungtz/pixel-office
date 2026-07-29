@@ -10,8 +10,22 @@ export interface ProviderDefinition {
   defaultModel: string;
 }
 
+export interface GameLoopConfig {
+  heartbeatIntervalMs: number;
+  behaviorWeights: {
+    goCoffee: number;
+    visitColleague: number;
+    stayDesk: number;
+  };
+  dialogueTrigger: {
+    minIntervalMs: number;
+    chance: number;
+  };
+}
+
 export interface AppConfig {
-  providers: Record<string, Omit<ProviderDefinition, 'id'>>;
+  gameLoop?: GameLoopConfig;
+  providers?: Record<string, Omit<ProviderDefinition, 'id'>>;
 }
 
 const config: AppConfig = rawConfig as AppConfig;
@@ -48,4 +62,36 @@ export function getProviderList(): ProviderDefinition[] {
 
 export function getProviderById(id: string): ProviderDefinition | undefined {
   return getProviderList().find(p => p.id === id);
+}
+
+export function getGameLoopConfig(): GameLoopConfig {
+  const defaultLoop: GameLoopConfig = {
+    heartbeatIntervalMs: 3000,
+    behaviorWeights: {
+      goCoffee: 0.3,
+      visitColleague: 0.3,
+      stayDesk: 0.4
+    },
+    dialogueTrigger: {
+      minIntervalMs: 6000,
+      chance: 0.4
+    }
+  };
+
+  if (config && config.gameLoop) {
+    return {
+      heartbeatIntervalMs: config.gameLoop.heartbeatIntervalMs ?? defaultLoop.heartbeatIntervalMs,
+      behaviorWeights: {
+        goCoffee: config.gameLoop.behaviorWeights?.goCoffee ?? defaultLoop.behaviorWeights.goCoffee,
+        visitColleague: config.gameLoop.behaviorWeights?.visitColleague ?? defaultLoop.behaviorWeights.visitColleague,
+        stayDesk: config.gameLoop.behaviorWeights?.stayDesk ?? defaultLoop.behaviorWeights.stayDesk
+      },
+      dialogueTrigger: {
+        minIntervalMs: config.gameLoop.dialogueTrigger?.minIntervalMs ?? defaultLoop.dialogueTrigger.minIntervalMs,
+        chance: config.gameLoop.dialogueTrigger?.chance ?? defaultLoop.dialogueTrigger.chance
+      }
+    };
+  }
+
+  return defaultLoop;
 }

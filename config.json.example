@@ -1,0 +1,40 @@
+{
+  "gameLoop": {
+    "heartbeatIntervalMs": 3000,
+    "behaviorWeights": {
+      "goCoffee": 0.3,
+      "visitColleague": 0.3,
+      "stayDesk": 0.4
+    },
+    "dialogueTrigger": {
+      "minIntervalMs": 6000,
+      "chance": 0.4
+    }
+  },
+  "providers": {
+    "ollama-cloud": {
+      "type": "cloud",
+      "sdk": "ollama",
+      "apiKey": "YOUR_OLLAMA_API_KEY",
+      "description": "Ollama Cloud",
+      "baseURL": "https://ollama.com",
+      "defaultModel": "gemma4:31b-cloud"
+    },
+    "opencode-zen": {
+      "type": "cloud",
+      "sdk": "openai",
+      "apiKey": "YOUR_OPENCODE_API_KEY",
+      "description": "OpenCode Zen",
+      "baseURL": "https://opencode.ai/zen/v1",
+      "defaultModel": "deepseek-v4-flash-free"
+    },
+    "agnes-ai": {
+      "type": "cloud",
+      "sdk": "openai",
+      "apiKey": "YOUR_AGNES_API_KEY",
+      "description": "Agnes",
+      "baseURL": "https://apihub.agnes-ai.com/v1",
+      "defaultModel": "agnes-2.0-flash"
+    }
+  }
+}

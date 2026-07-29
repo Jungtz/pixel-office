@@ -3,7 +3,10 @@ import { createDefaultMap, OFFICE_LOCATIONS, isTileWalkable, TILE_SIZE } from '.
 import { findPath } from './game/pathfinding';
 import { AgentCharacter, ChatMessage, Position, RoleType, MeetingState } from './game/types';
 import { fetchLLMResponse, LLMConfig } from './services/aiAgent';
+import { getGameLoopConfig } from './services/configService';
 import { ROLE_CONFIGS } from './services/roles';
+
+
 import { soundManager } from './services/sound';
 
 import { OfficeCanvas } from './components/OfficeCanvas';
@@ -88,6 +91,8 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (isSetupOpen || agents.length === 0) return;
 
+    const loopConfig = getGameLoopConfig();
+
     const interval = setInterval(async () => {
       // 如果正在開會，交由會議邏輯驅動
       if (meetingState.isActive) return;
@@ -98,17 +103,17 @@ export const App: React.FC = () => {
       if (idleAgents.length === 0) return;
 
       const randomAgent = idleAgents[Math.floor(Math.random() * idleAgents.length)];
-
-      // 隨機行為分類：40% 留在座位，30% 去咖啡機，30% 去找同事聊聊
       const rand = Math.random();
 
-      if (rand < 0.3) {
+      const { goCoffee, visitColleague } = loopConfig.behaviorWeights;
+
+      if (rand < goCoffee) {
         // 去咖啡機
         const path = findPath(map, randomAgent.gridPos, OFFICE_LOCATIONS.coffeeMachine);
         if (path.length > 0) {
           updateAgentPath(randomAgent.id, path, 'coffee');
         }
-      } else if (rand < 0.6) {
+      } else if (rand < goCoffee + visitColleague) {
         // 去找另一位同事聊聊
         const otherAgents = agents.filter(a => a.id !== randomAgent.id);
         if (otherAgents.length > 0) {
@@ -120,16 +125,18 @@ export const App: React.FC = () => {
         }
       }
 
-      // 每隔 6 秒以上，發動一次隨機對話
-      if (now - lastDialogueTime.current > 6000 && Math.random() > 0.4) {
+      // 自動觸發對話 (間隔與機率來自 config.json)
+      const { minIntervalMs, chance } = loopConfig.dialogueTrigger;
+      if (now - lastDialogueTime.current > minIntervalMs && Math.random() < chance) {
         lastDialogueTime.current = now;
         const speaker = agents[Math.floor(Math.random() * agents.length)];
         triggerAgentSpeech(speaker);
       }
-    }, 3000);
+    }, loopConfig.heartbeatIntervalMs);
 
     return () => clearInterval(interval);
   }, [agents, isSetupOpen, meetingState, map]);
+
 
   // 更新特定 Agent 的尋路路徑
   const updateAgentPath = (agentId: string, path: Position[], status: AgentCharacter['status']) => {
