@@ -13,16 +13,17 @@
     }
   },
   "models": {
-    "model": "agnes-ai/agnes-2.0-flash"
+    "label": "Ollama",
+    "model": "ollama"
   },
   "providers": {
-    "agnes-ai": {
+    "ollama": {
       "type": "cloud",
-      "sdk": "openai",
+      "sdk": "ollama",
       "apiKey": "YOUR_AGNES_API_KEY",
-      "description": "Agnes",
-      "baseURL": "https://apihub.agnes-ai.com/v1",
-      "defaultModel": "agnes-2.0-flash"
+      "description": "Ollama Cloud",
+      "baseURL": "https://ollama.com",
+      "defaultModel": "gemma4:31b-cloud"
     }
   }
 }

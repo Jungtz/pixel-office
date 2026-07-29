@@ -21,8 +21,9 @@ npm run preview  # 預覽正式建置
 ```
 
 - **前端**：`src/main.tsx` → `src/App.tsx`（單一頁面，無路由）
-- **後端**：`server.ts`，兩個端點：
+- **後端**：`server.ts`，三個端點：
   - `GET /api/providers` — 回傳可用 AI provider 列表（含 mock）
+  - `GET /api/model-config` — 回傳 `config.json` 的 `models` 設定（provider、model、label）
   - `POST /api/chat` — 代理 LLM 請求，支援 OpenAI 相容 SDK 與 Ollama；`speakerRole === 'TOPIC'` 時走主題生成模式
 - Vite proxy 將 `/api` 轉發到 `http://localhost:3001`，開發時前端直接 fetch `/api/*` 即可。
 
