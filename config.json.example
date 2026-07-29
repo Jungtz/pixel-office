@@ -1,4 +1,5 @@
 {
+  "port": 8881,
   "gameLoop": {
     "heartbeatIntervalMs": 3000,
     "behaviorWeights": {

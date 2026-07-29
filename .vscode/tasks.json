@@ -16,8 +16,7 @@
           "endsPattern": "ready in"
         }
       },
-      "label": "npm: dev",
-      "detail": "vite"
+      "label": "npm: dev"
     }
   ]
 }

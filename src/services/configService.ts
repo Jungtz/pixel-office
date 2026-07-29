@@ -24,6 +24,7 @@ export interface GameLoopConfig {
 }
 
 export interface AppConfig {
+  port?: number;
   gameLoop?: GameLoopConfig;
   models?: { model: string };
   providers?: Record<string, Omit<ProviderDefinition, 'id'>>;

@@ -3,13 +3,15 @@
 ## 開發指令
 
 ```bash
-npm run dev      # 同時啟動 Vite (前端 :3000) + tsx server.ts (後端 :3001)
+npm run dev      # Vite (前端 :8881) + tsx server.ts (後端 :3001)
 npm run build    # tsc 型別檢查 → vite build 正式建置
 npm run preview  # 預覽正式建置
 ```
 
 - `tsc` 只做型別檢查 (`noEmit: true`)，不產出檔案，真正的打包由 Vite 負責。
-- VS Code F5 可直接啟動 Chrome 並自動執行 `npm run dev`（見 `.vscode/launch.json`）。
+- 前端 port 由 `config.json` 的 `port` 欄位控制（預設 8881），後端固定 3001。
+- 按 F5 會同時啟動開發伺服器並開啟 Chrome。`stopAll: false` 確保關閉瀏覽器後伺服器繼續運作。
+- 修改 `config.json` 的 `port` 後需重啟 `npm run dev`，並同步更新 `.vscode/launch.json` 的 URL。
 
 ## 架構
 
@@ -39,6 +41,7 @@ npm run preview  # 預覽正式建置
 ## 角色人設
 
 `src/prompts/*.md` 為每個角色（pm、rd、qa、uiux、ad、intern、boss）的 LLM 人設提示，由 `server.ts` 的 `loadRolePrompt()` 讀取並注入 system prompt。新增角色需：
+
 1. 在 `src/services/roles.ts` 的 `ROLE_CONFIGS` 註冊
 2. 建立對應的 `src/prompts/{role}.md`
 3. 必要時更新 `src/game/types.ts` 的 `RoleType`
@@ -46,7 +49,7 @@ npm run preview  # 預覽正式建置
 ## 遊戲核心
 
 - 地圖：`src/game/officeMap.ts` — 24×16 網格
-- 尋路：`src/game/pathfinding.ts` — A*（曼哈頓啟發式）
+- 尋路：`src/game/pathfinding.ts` — A\*（曼哈頓啟發式）
 - 渲染：`src/game/gameEngine.ts` — Canvas 2D + requestAnimationFrame
 - 精靈：`src/game/sprites.ts` — 程式化像素繪圖
 - 音效：`src/services/sound.ts` — Web Audio API 合成復古音效
@@ -54,6 +57,7 @@ npm run preview  # 預覽正式建置
 ## 樣式慣例
 
 本專案混用三種樣式方式，無強制規範：
+
 - Tailwind utility class（`className="flex..."`）
 - 自訂 CSS class（定義在 `src/index.css`，部分與 Tailwind 功能重疊）
 - 內聯 `style={{}}`

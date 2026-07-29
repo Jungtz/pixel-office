@@ -1,13 +1,28 @@
 {
   "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "⚡ F5 完整啟動",
+      "configurations": ["啟動開發伺服器", "開啟 Chrome"],
+      "stopAll": false
+    }
+  ],
   "configurations": [
     {
+      "name": "啟動開發伺服器",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "開啟 Chrome",
       "type": "chrome",
       "request": "launch",
-      "name": "⚡ F5 啟動辦公室遊戲 (Launch Chrome/Edge)",
-      "url": "http://localhost:3000",
-      "webRoot": "${workspaceFolder}",
-      "preLaunchTask": "npm: dev"
+      "url": "http://localhost:8881",
+      "webRoot": "${workspaceFolder}"
     }
   ]
 }
