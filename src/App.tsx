@@ -95,8 +95,11 @@ export const App: React.FC = () => {
       const count = pendingConfig.counts[role];
       const isUserRole = role === pendingConfig.userRole;
       for (let i = 0; i < count; i++) {
-        const deskPos = OFFICE_LOCATIONS.desks[deskIdx % OFFICE_LOCATIONS.desks.length] || { x: 5, y: 5 };
-        deskIdx++;
+        const deskPos = role === 'BOSS'
+          ? OFFICE_LOCATIONS.bossDesk
+          : (OFFICE_LOCATIONS.desks[deskIdx % OFFICE_LOCATIONS.desks.length] || { x: 5, y: 5 });
+
+        if (role !== 'BOSS') deskIdx++;
 
         const isUserAgent = isUserRole && i === 0;
         const agentName = isUserAgent
