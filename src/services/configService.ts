@@ -26,11 +26,45 @@ export interface GameLoopConfig {
 export interface AppConfig {
   port?: number;
   gameLoop?: GameLoopConfig;
-  models?: { model: string };
+  models?: { model: string; label?: string };
   providers?: Record<string, Omit<ProviderDefinition, 'id'>>;
 }
 
 const config: AppConfig = rawConfig as AppConfig;
+
+interface ModelConfig {
+  provider: string;
+  model: string;
+  label: string;
+}
+
+let cachedModelConfig: ModelConfig | null = null;
+
+export async function initModelConfig(): Promise<ModelConfig> {
+  try {
+    const res = await fetch('/api/model-config');
+    if (res.ok) {
+      const data = await res.json();
+      cachedModelConfig = {
+        provider: data.provider || '',
+        model: data.model || '',
+        label: data.label || data.model || ''
+      };
+      return cachedModelConfig;
+    }
+  } catch {
+    console.warn('[ModelConfig] 無法從伺服器取得模型設定，使用預設值');
+  }
+  cachedModelConfig = { provider: '', model: '', label: '' };
+  return cachedModelConfig;
+}
+
+export function resolveModel(): { provider: string; model: string; label: string } {
+  if (cachedModelConfig) {
+    return { ...cachedModelConfig };
+  }
+  return { provider: '', model: '', label: '' };
+}
 
 export function getProviderList(): ProviderDefinition[] {
   const list: ProviderDefinition[] = [
@@ -96,16 +130,4 @@ export function getGameLoopConfig(): GameLoopConfig {
   }
 
   return defaultLoop;
-}
-
-export function resolveModel(): string {
-  const modelConfig = config?.models?.model;
-  if (!modelConfig || typeof modelConfig !== 'string') return '';
-
-  if (modelConfig.includes('/')) {
-    return modelConfig;
-  }
-
-  const provider = config?.providers?.[modelConfig];
-  return provider?.defaultModel || '';
 }

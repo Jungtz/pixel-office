@@ -206,6 +206,7 @@ export async function fetchLLMResponse(
       },
       body: JSON.stringify({
         providerId: config.provider,
+        model: config.model,
         speakerRole,
         speakerName,
         contextMessages,
