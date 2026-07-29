@@ -19,6 +19,7 @@ interface ProviderConfig {
 }
 
 interface AppConfig {
+  port?: number;
   providers?: Record<string, ProviderConfig>;
 }
 
@@ -51,6 +52,36 @@ function loadRolePrompt(roleId: string): string {
     }
   }
   return `你是一名 ${roleId}。說話請保持該職位的性格特點。`;
+}
+
+interface SceneData {
+  time: string;
+  totalPeople: number;
+  members: string;
+  topic?: string;
+}
+
+function loadScenePrompt(data: SceneData): string {
+  const promptPath = path.join(process.cwd(), 'src', 'prompts', 'scene.md');
+  let template = '';
+  if (fs.existsSync(promptPath)) {
+    try {
+      template = fs.readFileSync(promptPath, 'utf-8').trim();
+    } catch (err) {
+      console.error('Failed to read scene prompt file:', err);
+    }
+  }
+  if (!template) {
+    template = '【AI 辦公室大亂鬥 — 當前場景】\n現在時間：{{time}}\n辦公室成員（共 {{totalPeople}} 人）：\n{{members}}\n{{topicLine}}';
+  }
+
+  const topicLine = data.topic ? `目前討論主題：「${data.topic}」` : '目前無特定討論主題。';
+
+  return template
+    .replace('{{time}}', data.time)
+    .replace('{{totalPeople}}', String(data.totalPeople))
+    .replace('{{members}}', data.members)
+    .replace('{{topicLine}}', topicLine);
 }
 
 /**
@@ -86,7 +117,7 @@ app.get('/api/providers', (req: Request, res: Response) => {
  */
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
-    const { providerId, speakerRole, speakerName, contextMessages, topic } = req.body;
+    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData } = req.body;
     const config = loadConfig();
     const provider = config.providers?.[providerId];
 
@@ -108,7 +139,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       ];
     } else {
       const basePrompt = loadRolePrompt(speakerRole);
-      systemPrompt = `${basePrompt} 你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。`;
+      const sceneBlock = sceneData ? `\n\n${loadScenePrompt(sceneData)}` : '';
+      systemPrompt = `${basePrompt} 你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。${sceneBlock}`;
+      console.log(`[SceneCtx] : ${sceneData ? `已載入 (${sceneData.totalPeople}人, ${sceneData.time})` : '無場景資訊'}`);
       messagesPayload = [
         { role: 'system', content: systemPrompt },
         ...(contextMessages || []).slice(-5).map((m: any) => ({

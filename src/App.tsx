@@ -39,8 +39,13 @@ export const App: React.FC = () => {
     provider: 'mock'
   });
 
-  // 避免隨機自動對話過於頻繁的 timer ref
   const lastDialogueTime = useRef<number>(Date.now());
+  const isGeneratingRef = useRef<boolean>(false);
+  const activeDialogueRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    activeDialogueRef.current = activeDialogue !== null;
+  }, [activeDialogue]);
 
   // 1. 第一階段：初始化團隊角色與 Provider，並開啟 TopicModal 選擇主題
   const handleStartSetup = (config: RoleSetupConfig) => {
@@ -148,7 +153,12 @@ export const App: React.FC = () => {
 
       // 自動觸發對話 (帶入當前辦公室主題與 config.json 設定)
       const { minIntervalMs, chance } = loopConfig.dialogueTrigger;
-      if (now - lastDialogueTime.current > minIntervalMs && Math.random() < chance) {
+      if (
+        now - lastDialogueTime.current > minIntervalMs &&
+        Math.random() < chance &&
+        !isGeneratingRef.current &&
+        !activeDialogueRef.current
+      ) {
         lastDialogueTime.current = now;
         const speaker = agents[Math.floor(Math.random() * agents.length)];
         triggerAgentSpeech(speaker, currentTopic);
@@ -165,35 +175,59 @@ export const App: React.FC = () => {
     );
   };
 
-  // 觸發 Agent 發言
+  const buildSceneData = (topic?: string) => {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    const totalPeople = agents.length;
+
+    const members = agents.map(a => {
+      const roleCfg = ROLE_CONFIGS[a.role];
+      return `- [${a.role}] ${a.name}：${roleCfg?.title || a.role}`;
+    }).join('\n');
+
+    return { time: timeStr, totalPeople, members, topic };
+  };
+
   const triggerAgentSpeech = async (speaker: AgentCharacter, topic?: string) => {
-    const text = await fetchLLMResponse(llmConfig, speaker.role, speaker.name, chatMessages, topic);
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (isGeneratingRef.current) return;
+    isGeneratingRef.current = true;
 
-    const newMsg: ChatMessage = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      speakerId: speaker.id,
-      speakerName: speaker.name,
-      speakerRole: speaker.role,
-      text,
-      timestamp: timeStr,
-      isMeeting: meetingState.isActive
-    };
+    try {
+      const text = await fetchLLMResponse(
+        llmConfig,
+        speaker.role,
+        speaker.name,
+        chatMessages,
+        topic,
+        buildSceneData(topic)
+      );
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // 更新角色頭頂 Speech Bubble 與對話紀錄
-    setAgents(prev =>
-      prev.map(a =>
-        a.id === speaker.id
-          ? { ...a, speechBubble: text, speechTimer: 4, direction: 'down' }
-          : a
-      )
-    );
+      const newMsg: ChatMessage = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        speakerId: speaker.id,
+        speakerName: speaker.name,
+        speakerRole: speaker.role,
+        text,
+        timestamp: timeStr,
+        isMeeting: meetingState.isActive
+      };
 
-    setChatMessages(prev => [...prev, newMsg]);
-    setActiveDialogue(newMsg);
+      setAgents(prev =>
+        prev.map(a =>
+          a.id === speaker.id
+            ? { ...a, speechBubble: text, speechTimer: 4, direction: 'down' }
+            : a
+        )
+      );
 
-    // 播放復古打字嗶嗶聲
-    soundManager.playTextBleep(600);
+      setChatMessages(prev => [...prev, newMsg]);
+      setActiveDialogue(newMsg);
+
+      soundManager.playTextBleep(600);
+    } finally {
+      isGeneratingRef.current = false;
+    }
   };
 
   // 4. 召開全體會議 (Call Meeting)
@@ -338,6 +372,7 @@ export const App: React.FC = () => {
         onNext={() => {
           if (!activeDialogue) return;
           const topic = meetingState.topic || currentTopic;
+          lastDialogueTime.current = Date.now();
 
           const nominee = parseNomination(activeDialogue.text);
           if (nominee && nominee.id !== activeDialogue.speakerId) {
