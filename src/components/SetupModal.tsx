@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RoleType } from '../game/types';
 import { ROLE_CONFIGS } from '../services/roles';
 import { soundManager } from '../services/sound';
-import { getProviderList, getProviderById, resolveModel } from '../services/configService';
+import { getProviderList, getProviderById, resolveModel, initModelConfig } from '../services/configService';
 import { Users, Sparkles, Play, ShieldAlert } from 'lucide-react';
 
 export interface RoleSetupConfig {
@@ -51,38 +51,55 @@ const loadSavedCounts = (): Record<RoleType, number> => {
   return { ...DEFAULT_COUNTS };
 };
 
-const loadSavedProvider = (): string => {
+const loadSavedProvider = (): string | null => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY_PROVIDER);
     if (saved) return saved;
   } catch { /* ignore */ }
-  return 'mock';
+  return null;
 };
 
 export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
   const [counts, setCounts] = useState<Record<RoleType, number>>(loadSavedCounts);
 
   const providers = getProviderList();
-  const [selectedProviderId, setSelectedProviderId] = useState<string>(loadSavedProvider);
+  const [selectedProviderId, setSelectedProviderId] = useState<string>(() => loadSavedProvider() || '');
   const [apiKey, setApiKey] = useState<string>('');
   const [baseUrl, setBaseUrl] = useState<string>('');
   const [model, setModel] = useState<string>('');
   const [sdk, setSdk] = useState<string>('');
 
   useEffect(() => {
+    initModelConfig().then(() => {
+      const saved = loadSavedProvider();
+      const resolved = resolveModel();
+      const validIds = new Set(['mock', resolved.provider].filter(Boolean));
+
+      if (saved && validIds.has(saved)) {
+        setSelectedProviderId(saved);
+      } else {
+        setSelectedProviderId(resolved.provider || 'mock');
+      }
+    });
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEY_COUNTS, JSON.stringify(counts));
   }, [counts]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PROVIDER, selectedProviderId);
+    if (selectedProviderId) {
+      localStorage.setItem(STORAGE_KEY_PROVIDER, selectedProviderId);
+    }
   }, [selectedProviderId]);
 
   useEffect(() => {
     const provDef = getProviderById(selectedProviderId);
     if (provDef) {
+      const resolved = resolveModel();
       setApiKey(provDef.apiKey);
       setBaseUrl(provDef.baseURL);
-      setModel(selectedProviderId === 'agnes-ai' ? resolveModel() : provDef.defaultModel);
+      setModel(selectedProviderId === resolved.provider && resolved.model ? resolved.model : provDef.defaultModel);
       setSdk(provDef.sdk);
     }
   }, [selectedProviderId]);
@@ -102,9 +119,10 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
     setSelectedProviderId(provId);
     const provDef = getProviderById(provId);
     if (provDef) {
+      const resolved = resolveModel();
       setApiKey(provDef.apiKey);
       setBaseUrl(provDef.baseURL);
-      setModel(provId === 'agnes-ai' ? resolveModel() : provDef.defaultModel);
+      setModel(provId === resolved.provider && resolved.model ? resolved.model : provDef.defaultModel);
       setSdk(provDef.sdk);
     } else {
       setApiKey('');
@@ -224,40 +242,49 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
               })}
             </div>
 
-            {/* AI 驅動模式選擇 (連動 config.json) */}
+             {/* AI 驅動模式選擇 (連動 config.json) */}
             <div className="bg-slate-900/90 border border-slate-800 p-4 rounded flex flex-col gap-3">
               <label className="text-xs font-mono font-bold text-amber-400 flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4 text-amber-400" /> AI 對話驅動模式 (已整合 config.json Providers)：
+                <ShieldAlert className="w-4 h-4 text-amber-400" /> AI 對話驅動模式 (連動 config.json models 設定)：
               </label>
 
               <div className="grid grid-cols-2 gap-2">
-                {providers.filter(p => p.id === 'mock' || p.id === 'agnes-ai').map(prov => {
-                  const isSelected = selectedProviderId === prov.id;
-                  let icon = '⚡';
-                  if (prov.id === 'agnes-ai') icon = '✨';
-
-                  return (
-                    <button
-                      key={prov.id}
-                      type="button"
-                      onClick={() => handleSelectProvider(prov.id)}
-                      className={`py-2 px-2 text-xs font-mono rounded border transition flex flex-col items-center justify-center gap-1 text-center ${
-                        isSelected
-                          ? 'bg-amber-400 text-slate-950 font-bold border-amber-500 shadow-md'
-                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <span className="font-bold text-xs flex items-center gap-1">
-                        <span>{icon}</span> {prov.id === 'mock' ? 'Mock' : 'AI'}
-                      </span>
-                      {prov.defaultModel && prov.id !== 'mock' && (
-                        <span className={`text-[10px] ${isSelected ? 'text-slate-900 font-bold' : 'text-slate-500'} font-mono`}>
-                          {prov.defaultModel}
-                        </span>
-                      )}
-                    </button>
+                {(() => {
+                  const resolved = resolveModel();
+                  const visibleProviders = providers.filter(p =>
+                    p.id === 'mock' || (resolved.provider && p.id === resolved.provider)
                   );
-                })}
+
+                  return visibleProviders.map(prov => {
+                    const isSelected = selectedProviderId === prov.id;
+                    const isMock = prov.id === 'mock';
+                    const title = isMock
+                      ? 'Mock AI'
+                      : (resolved.label || `${resolved.provider}/${resolved.model}`);
+
+                    return (
+                      <button
+                        key={prov.id}
+                        type="button"
+                        onClick={() => handleSelectProvider(prov.id)}
+                        className={`py-2 px-2 text-xs font-mono rounded border transition flex flex-col items-center justify-center gap-1 text-center ${
+                          isSelected
+                            ? 'bg-amber-400 text-slate-950 font-bold border-amber-500 shadow-md'
+                            : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <span className="font-bold text-xs flex items-center gap-1">
+                          <span>{isMock ? '⚡' : '☁️'}</span> {title}
+                        </span>
+                        {isMock && (
+                          <span className={`text-[10px] ${isSelected ? 'text-slate-900 font-bold' : 'text-slate-500'} font-mono`}>
+                            即插即用
+                          </span>
+                        )}
+                      </button>
+                    );
+                  });
+                })()}
               </div>
             </div>
 
