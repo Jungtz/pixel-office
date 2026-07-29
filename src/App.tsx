@@ -102,9 +102,10 @@ export const App: React.FC = () => {
     setTimeout(() => {
       const leader = newAgents.find(a => a.role === 'BOSS') || newAgents.find(a => a.role === 'PM') || newAgents[0];
       if (leader) {
-        triggerAgentSpeech(leader, `團隊核心目標：${selectedTopic}`);
+        triggerAgentSpeech(leader, selectedTopic);
       }
     }, 600);
+
   };
 
   // 3. 自動漫遊與對話循環 (Agent Autonomous Loop)

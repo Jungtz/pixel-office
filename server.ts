@@ -120,9 +120,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       if (topic) {
         messagesPayload.push({
           role: 'user',
-          content: `當前辦公室討論主題：${topic}。請發表你的看法。`
+          content: `當前辦公室討論主題是：「${topic}」。請完全以你專屬的職位視角與性格，針對該主題發表你原創的一兩句話看法（絕不要複製或重複他人發言與標題文字）。`
         });
       }
+
     }
 
     const baseUrl = (provider.baseURL || (provider.sdk === 'ollama' ? 'https://ollama.com' : 'https://api.openai.com/v1')).replace(/\/$/, '');

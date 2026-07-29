@@ -46,8 +46,49 @@ const MOCK_DIALOGUE_SCRIPTS: Record<string, string[]> = {
   ]
 };
 
+// 角色專屬多樣化主題回應庫 (消除重複機器人發言)
+const ROLE_TOPIC_TEMPLATES: Record<RoleType, string[]> = {
+  PM: [
+    '關於「{topic}」，我先把 Task 拆解到 JIRA 上，大家確認一下排程優先級。',
+    '這個「{topic}」的 ETA 訂在週五，有任何風險或 Blocker 請第一時間回報！',
+    '大家對「{topic}」還有疑問嗎？沒問題的話我們就按照衝刺計劃執行。',
+    '客戶那邊非常關心「{topic}」的進度，我們需要每天保持同步。'
+  ],
+  RD: [
+    '關於「{topic}」，涉及到的架構範圍有點大，我得先看技術文件... post-mortem。',
+    '如果要做「{topic}」，現有的資料庫 Schema 需要另外加 Index 效能才跟得上。',
+    '這部分程式碼我會盡快在今天出個 Draft PR，發出來請大家幫忙 Code Review！',
+    '「{topic}」跑 Local 測試都過關了，等等準備推送到 Staging 環境驗證。'
+  ],
+  QA: [
+    '「{topic}」需要補上新的單元測試與自動化邊界條件腳本！',
+    '我等等會針對「{topic}」建立專屬 Test Suite 進行壓力與回歸測試。',
+    '發佈前請記得把「{topic}」的測試報告整理好，沒通過的 Bug 一律不能上。',
+    '剛才在連擊測試中發現了極端 Exception，先把我記錄的 Issue 點進來看。'
+  ],
+  UIUX: [
+    '關於「{topic}」，從使用者操作流程看，我覺得視覺層級還可以更簡潔。',
+    '我已經把「{topic}」最新的 UI 介面草圖更新到 Figma，大家看一下動線順不順。',
+    '設計規範一定要保持 Consistent，不能因為急著出版就跑版。'
+  ],
+  AD: [
+    '「{topic}」這波宣傳切入點要夠殺！視覺要讓使用者一眼亮起來！',
+    '美術視覺跟動畫效果要跟上「{topic}」的主題格調，給大眾頂級體驗！'
+  ],
+  INTERN: [
+    '關於「{topic}」，需要我幫忙抄寫會議紀錄或者建 Dummy Data 嗎？',
+    '學長姐太厲害了！「{topic}」我也想跟著做，在旁學習一下！',
+    '收到！我這就去整理「{topic}」的文件與相關案例研究。'
+  ],
+  BOSS: [
+    '「{topic}」關係到我們團隊今年的核心 KPI，這仗必須打贏！',
+    '只要成功搞定「{topic}」，這個月加菜、年終獎金翻倍，大家一起衝！',
+    '各位同仁，把「{topic}」做好，我們就要向創投與市場證明實力了！'
+  ]
+};
+
 /**
- * 產生 Mock 對話回應
+ * 產生 Mock 對話回應 (支援豐富的多樣化主題範本)
  */
 export function generateMockResponse(
   speaker: AgentCharacter,
@@ -57,39 +98,15 @@ export function generateMockResponse(
   const roleInfo = ROLE_CONFIGS[speaker.role] || ROLE_CONFIGS['RD'];
   const catchphrases = roleInfo.catchphrases || ['大家一起加油！'];
 
-  // 1. 如果有特定主題 (例如 Boss 指派或會議)
+  // 1. 如果有特定主題 (優先挑選角色專屬主題範本)
   if (topic) {
-    if (topic.includes('上線') || topic.includes('發佈')) {
-      if (speaker.role === 'PM') return `關於「${topic}」，我們今天下午 5 點必須出測試 Build，ETA 絕不能延誤！`;
-      if (speaker.role === 'RD') return `「${topic}」的 PR 還在被 Code Review，而且部署腳本好像有點問題...`;
-      if (speaker.role === 'QA') return `「${topic}」還有 2 個 High 級別的 Bug 沒解決，我不建議強行上線！`;
-      if (speaker.role === 'UIUX') return `發佈前請確定 UI 元件沒有在小螢幕跑版，畫面留白要維持！`;
-      if (speaker.role === 'AD') return `上線的 Banner 視覺必須給力，讓人一眼就 WOW 出聲來！`;
-      if (speaker.role === 'INTERN') return `學長！「${topic}」需要我幫忙做什麼測試或紀錄嗎？`;
-      if (speaker.role === 'BOSS') return `「${topic}」是我們本季度的核心目標，大家全力衝刺！`;
+    const templates = ROLE_TOPIC_TEMPLATES[speaker.role];
+    if (templates && templates.length > 0) {
+      const idx = Math.floor(Math.random() * templates.length);
+      const rawTpl = templates[idx] || templates[0];
+      return rawTpl.replace('{topic}', topic);
     }
-
-    if (topic.includes('Bug') || topic.includes('崩潰') || topic.includes('問題') || topic.includes('瓶頸')) {
-      if (speaker.role === 'QA') return `我找到復現步驟了！連點三個按鈕就會觸發 NullPointer！`;
-      if (speaker.role === 'RD') return `這不可能啊，在我的 Local 環境跑都很正常... 我看一下 Sentry Log。`;
-      if (speaker.role === 'PM') return `這個 Bug 會影響發佈嗎？能不能先做個 Workaround？`;
-      if (speaker.role === 'UIUX') return `順便檢查一下錯誤提示彈窗的樣式，不要用瀏覽器預設 alert！`;
-      if (speaker.role === 'AD') return `崩潰畫面的 Icon 要設計得幽默一點，緩解使用者情緒。`;
-      if (speaker.role === 'INTERN') return `對不起學長！這個 Bug 好像是我昨天提交的程式碼引起的...`;
-      if (speaker.role === 'BOSS') return `出現緊急 Bug 了！相關人員成立 War Room 限期解決！`;
-    }
-
-    if (topic.includes('需求') || topic.includes('改動') || topic.includes('新功能') || topic.includes('架構')) {
-      if (speaker.role === 'PM') return `客戶剛剛緊急提出了這個新需求，我覺得很有價值，今天加進去！`;
-      if (speaker.role === 'RD') return `又改需求？！這等於要重構底層 API，時程要多加三天！`;
-      if (speaker.role === 'QA') return `需求改動的話，之前的 Test Cases 全部都要重新執行一遍...`;
-      if (speaker.role === 'UIUX') return `我先在 Figma 上拉個 Wireframe，大家確定互動流程再動手。`;
-      if (speaker.role === 'AD') return `新需求的整體視覺風格必須與目前的 Brand Identity 一致。`;
-      if (speaker.role === 'INTERN') return `收到！我先在旁側記錄新需求的細節與 Task 拆解。`;
-      if (speaker.role === 'BOSS') return `這個新需求很關鍵！做出來能大大提升我們的商業價值與 ROI！`;
-    }
-
-    return `關於「${topic}」，大家準備好各自分工，全力完成目標！`;
+    return `關於「${topic}」，我這邊沒問題，大家準備好各自分工，全力完成目標！`;
   }
 
   // 2. 如果前一句對話有人講話，進行回應
@@ -103,7 +120,7 @@ export function generateMockResponse(
         return `${lastMsg.speakerName} 你確定 Local 沒問題？我這隨便一測就點出 Exception 了喔！`;
       }
       if (lastMsg.speakerRole === 'UIUX' && speaker.role === 'RD') {
-        return `${lastMsg.speakerName} 要求的這個微微動畫效果，會增加 DOM 渲染負擔，我先測效能。`;
+        return `${lastMsg.speakerName} 要求的這個動畫效果，會增加 DOM 負擔，我先測效能。`;
       }
     }
   }
