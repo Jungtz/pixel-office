@@ -34,8 +34,8 @@ export function generateMockResponse(
   contextMessages: ChatMessage[],
   topic?: string
 ): string {
-  const roleInfo = ROLE_CONFIGS[speaker.role];
-  const catchphrases = roleInfo.catchphrases;
+  const roleInfo = ROLE_CONFIGS[speaker.role] || ROLE_CONFIGS['RD'];
+  const catchphrases = roleInfo.catchphrases || ['大家一起加油！'];
 
   // 1. 如果有特定主題 (例如 Boss 指派或會議)
   if (topic) {
@@ -55,6 +55,8 @@ export function generateMockResponse(
       if (speaker.role === 'PM') return `這個 Bug 會影響發佈嗎？能不能先做個 Workaround？`;
       if (speaker.role === 'UIUX') return `順便檢查一下錯誤提示彈窗的樣式，不要用瀏覽器預設 alert！`;
       if (speaker.role === 'AD') return `崩潰畫面的 Icon 要設計得幽默一點，緩解使用者情緒。`;
+      if (speaker.role === 'INTERN') return `對不起學長！這個 Bug 好像是我昨天提交的程式碼引起的...`;
+      if (speaker.role === 'BOSS') return `出現緊急 Bug 了！相關人員立刻成立 War Room 限期解決！`;
     }
 
     if (topic.includes('需求') || topic.includes('改動') || topic.includes('新功能')) {
@@ -62,13 +64,18 @@ export function generateMockResponse(
       if (speaker.role === 'RD') return `又改需求？！這等於要重構底層 API，時程要多加三天！`;
       if (speaker.role === 'QA') return `需求改動的話，之前的 Test Cases 全部都要重新執行一遍...`;
       if (speaker.role === 'UIUX') return `我先在 Figma 上拉個 Wireframe，大家確定互動流程再動手。`;
+      if (speaker.role === 'AD') return `新需求的整體視覺風格必須與目前的 Brand Identity 一致。`;
+      if (speaker.role === 'INTERN') return `收到！我先在旁側記錄新需求的細節與 Task 拆解。`;
+      if (speaker.role === 'BOSS') return `這個新需求很關鍵！做出來能大大提升我們的商業價值與 ROI！`;
     }
+
+    return `關於「${topic}」，大家準備好各自分工，全力完成目標！`;
   }
 
   // 2. 如果前一句對話有人講話，進行回應
-  if (contextMessages.length > 0) {
+  if (contextMessages && contextMessages.length > 0) {
     const lastMsg = contextMessages[contextMessages.length - 1];
-    if (lastMsg.speakerId !== speaker.id) {
+    if (lastMsg && lastMsg.speakerId !== speaker.id) {
       if (lastMsg.speakerRole === 'PM' && (speaker.role === 'RD' || speaker.role === 'QA')) {
         return `針對 ${lastMsg.speakerName} 剛剛說的進度，我們還在評估風險，不能盲目保證 ETA。`;
       }
@@ -83,15 +90,17 @@ export function generateMockResponse(
 
   // 3. 隨機金句或生活對話
   const isCatchphrase = Math.random() > 0.4;
-  if (isCatchphrase) {
+  if (isCatchphrase && catchphrases.length > 0) {
     const randomIdx = Math.floor(Math.random() * catchphrases.length);
-    return catchphrases[randomIdx];
+    return catchphrases[randomIdx] || catchphrases[0];
   } else {
     const category = speaker.status === 'coffee' ? 'coffee' : 'general';
-    const pool = MOCK_DIALOGUE_SCRIPTS[category];
-    return pool[Math.floor(Math.random() * pool.length)];
+    const pool = MOCK_DIALOGUE_SCRIPTS[category] || MOCK_DIALOGUE_SCRIPTS.general;
+    const item = pool[Math.floor(Math.random() * pool.length)];
+    return item || catchphrases[0] || '大家加油！';
   }
 }
+
 
 /**
  * 呼叫真實大語言模型 API (OpenAI 或 Gemini)
