@@ -250,10 +250,40 @@ export const App: React.FC = () => {
     const maxRounds = loopCfg.maxDialogueRounds || 0;
     const remaining = maxRounds > 0 ? Math.max(0, maxRounds - dialogueRoundCount.current) : -1;
 
+    const isNear = (a: Position, b: Position) =>
+      Math.abs(a.x - b.x) + Math.abs(a.y - b.y) <= 2;
+
+    const getLocationNote = (agent: AgentCharacter): string => {
+      const pos = agent.gridPos;
+      const desk = agent.deskPos;
+      if (isNear(pos, desk)) return '';
+
+      if (agent.path.length > 0) {
+        const dest = agent.path[agent.path.length - 1];
+        if (agent.status === 'coffee') return '（正去泡咖啡）';
+        if (isNear(dest, OFFICE_LOCATIONS.waterCooler)) return '（正去茶水間）';
+        if (isNear(dest, OFFICE_LOCATIONS.whiteboard)) return '（正往白板）';
+        if (isNear(dest, desk)) return '（返回座位中）';
+        for (const s of OFFICE_LOCATIONS.sofaArea) {
+          if (isNear(dest, s)) return '（前往沙發區）';
+        }
+        return '（走動中）';
+      }
+
+      if (isNear(pos, OFFICE_LOCATIONS.coffeeMachine)) return '（在咖啡機前）';
+      if (isNear(pos, OFFICE_LOCATIONS.waterCooler)) return '（在飲水機旁）';
+      if (isNear(pos, OFFICE_LOCATIONS.whiteboard)) return '（在白板前）';
+      for (const s of OFFICE_LOCATIONS.sofaArea) {
+        if (isNear(pos, s)) return '（在沙發區休息）';
+      }
+      return '（走動中）';
+    };
+
     const members = agents.map(a => {
       const roleCfg = ROLE_CONFIGS[a.role];
       const userMark = a.isUser ? ' 👤' : '';
-      return `- [${a.role}] ${a.name}：${roleCfg?.title || a.role}${userMark}`;
+      const note = getLocationNote(a);
+      return `- [${a.role}] ${a.name}：${roleCfg?.title || a.role}${userMark}${note}`;
     }).join('\n');
 
     return { time: timeStr, totalPeople, members, topic, roundNumber: dialogueRoundCount.current + 1, maxRounds, remaining };
