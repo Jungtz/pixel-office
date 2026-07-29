@@ -28,23 +28,6 @@ const MOCK_DIALOGUE_SCRIPTS: Record<string, string[]> = {
 };
 
 /**
- * 解析 API 代理路徑，解決瀏覽器跨網域 CORS (Failed to fetch) 限制
- */
-function resolveEndpointUrl(baseUrl: string | undefined, defaultSuffix: string): string {
-  const url = (baseUrl || '').replace(/\/$/, '');
-  if (url.includes('ollama.com')) {
-    return url.replace('https://ollama.com', '/api-proxy/ollama') + defaultSuffix;
-  }
-  if (url.includes('opencode.ai')) {
-    return url.replace('https://opencode.ai', '/api-proxy/opencode') + defaultSuffix;
-  }
-  if (url.includes('agnes-ai.com')) {
-    return url.replace('https://apihub.agnes-ai.com', '/api-proxy/agnes') + defaultSuffix;
-  }
-  return url ? `${url}${defaultSuffix}` : `https://api.openai.com/v1${defaultSuffix}`;
-}
-
-/**
  * 產生 Mock 對話回應
  */
 export function generateMockResponse(
@@ -74,7 +57,7 @@ export function generateMockResponse(
       if (speaker.role === 'UIUX') return `順便檢查一下錯誤提示彈窗的樣式，不要用瀏覽器預設 alert！`;
       if (speaker.role === 'AD') return `崩潰畫面的 Icon 要設計得幽默一點，緩解使用者情緒。`;
       if (speaker.role === 'INTERN') return `對不起學長！這個 Bug 好像是我昨天提交的程式碼引起的...`;
-      if (speaker.role === 'BOSS') return `出現緊急 Bug 了！相關人員立刻成立 War Room 限期解決！`;
+      if (speaker.role === 'BOSS') return `出現緊急 Bug 了！相關人員成立 War Room 限期解決！`;
     }
 
     if (topic.includes('需求') || topic.includes('改動') || topic.includes('新功能')) {
@@ -120,7 +103,7 @@ export function generateMockResponse(
 }
 
 /**
- * 呼叫真實大語言模型 API (支援 Ollama, OpenAI, OpenCode, Agnes 等 Cloud API)
+ * 呼叫後端 API (/api/chat) 進行安全且無 CORS 限制的 LLM 回覆產生
  */
 export async function fetchLLMResponse(
   config: LLMConfig,
@@ -129,7 +112,7 @@ export async function fetchLLMResponse(
   contextMessages: ChatMessage[],
   topic?: string
 ): Promise<string> {
-  if (config.provider === 'mock' || !config.apiKey) {
+  if (config.provider === 'mock') {
     return generateMockResponse(
       { role: speakerRole, name: speakerName } as AgentCharacter,
       contextMessages,
@@ -137,69 +120,27 @@ export async function fetchLLMResponse(
     );
   }
 
-  const roleConfig = ROLE_CONFIGS[speakerRole] || ROLE_CONFIGS['RD'];
-  const systemPrompt = `${roleConfig.systemPrompt} 你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。`;
-
-  const messagesPayload = [
-    { role: 'system', content: systemPrompt },
-    ...contextMessages.slice(-5).map(m => ({
-      role: m.speakerRole === speakerRole ? 'assistant' : 'user',
-      content: `${m.speakerName} (${m.speakerRole}): ${m.text}`
-    }))
-  ];
-
-  if (topic) {
-    messagesPayload.push({
-      role: 'user',
-      content: `當前辦公室討論主題：${topic}。請發表你的看法。`
-    });
-  }
-
   try {
-    // Ollama SDK / Ollama Cloud API
-    if (config.sdk === 'ollama') {
-      const endpoint = resolveEndpointUrl(config.baseUrl, '/api/chat');
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: config.model || 'gemma4:31b-cloud',
-          messages: messagesPayload,
-          stream: false
-        })
-      });
-      const data = await response.json();
-      const resText = data.message?.content || data.choices?.[0]?.message?.content;
-      if (resText && typeof resText === 'string') {
-        return resText.trim();
-      }
-    } else {
-      // OpenAI Compatible SDK (OpenCode Zen, Agnes AI, OpenAI, etc.)
-      const endpoint = resolveEndpointUrl(config.baseUrl, '/chat/completions');
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: config.model || 'gpt-3.5-turbo',
-          messages: messagesPayload,
-          max_tokens: 120,
-          temperature: 0.8
-        })
-      });
-      const data = await response.json();
-      const resText = data.choices?.[0]?.message?.content;
-      if (resText && typeof resText === 'string') {
-        return resText.trim();
-      }
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        providerId: config.provider,
+        speakerRole,
+        speakerName,
+        contextMessages,
+        topic
+      })
+    });
+
+    const data = await response.json();
+    if (data.status === 'success' && data.text && typeof data.text === 'string') {
+      return data.text;
     }
   } catch (err) {
-    console.warn('LLM API Error, fallback to mock:', err);
+    console.warn('Backend API Call Error, fallback to mock:', err);
   }
 
   return generateMockResponse({ role: speakerRole, name: speakerName } as AgentCharacter, contextMessages, topic);
