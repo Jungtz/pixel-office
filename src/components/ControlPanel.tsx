@@ -21,6 +21,7 @@ interface ControlPanelProps {
   onResetSetup: () => void;
   isMeetingActive: boolean;
   agentCount: number;
+  chatMessagesCount?: number;
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -30,8 +31,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   onToggleChatLog,
   onResetSetup,
   isMeetingActive,
-  agentCount
+  agentCount,
+  chatMessagesCount = 0
 }) => {
+
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [customInput, setCustomInput] = useState('');
   const [showInputModal, setShowInputModal] = useState<'meeting' | 'task' | null>(null);
@@ -139,11 +142,18 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                   soundManager.playSelectSound();
                   onToggleChatLog();
                 }}
-                className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded text-slate-300 text-xs transition"
-                title="對話紀錄"
+                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/60 rounded text-slate-200 text-xs font-mono font-bold flex items-center gap-1.5 transition"
+                title="查看對話與事件歷史"
               >
-                <History className="w-4 h-4" />
+                <History className="w-4 h-4 text-amber-400" />
+                歷史紀錄
+                {chatMessagesCount > 0 && (
+                  <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded-full text-[10px] font-bold font-mono">
+                    {chatMessagesCount}
+                  </span>
+                )}
               </button>
+
 
               {/* Reset Team Setup Button */}
               <button

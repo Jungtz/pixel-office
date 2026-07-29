@@ -235,7 +235,9 @@ export const App: React.FC = () => {
         onResetSetup={() => setIsSetupOpen(true)}
         isMeetingActive={meetingState.isActive}
         agentCount={agents.length}
+        chatMessagesCount={chatMessages.length}
       />
+
 
       {/* 2D Canvas 遊戲主畫面 */}
       <div className="flex-1 w-full h-full relative">
