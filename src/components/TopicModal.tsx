@@ -42,25 +42,35 @@ export const TopicModal: React.FC<TopicModalProps> = ({
 
     try {
       if (llmConfig.provider !== 'mock') {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            providerId: llmConfig.provider,
-            speakerRole: 'TOPIC',
-            speakerName: 'TopicGenerator'
-          })
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 125000);
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.status === 'success' && data.text) {
-            const cleanText = data.text.replace(/["「」]/g, '').trim();
-            console.log(`[Client Topic Generator] Received AI Topic: "${cleanText}"`);
-            setTopic(cleanText);
-            setIsGenerating(false);
-            return;
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              providerId: llmConfig.provider,
+              speakerRole: 'TOPIC',
+              speakerName: 'TopicGenerator'
+            }),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'success' && data.text) {
+              const cleanText = data.text.replace(/["「」]/g, '').trim();
+              console.log(`[Client Topic Generator] Received AI Topic: "${cleanText}"`);
+              setTopic(cleanText);
+              setIsGenerating(false);
+              return;
+            }
           }
+        } catch (fetchErr) {
+          clearTimeout(timeoutId);
+          throw fetchErr;
         }
       }
     } catch (err) {
@@ -150,6 +160,13 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                   <Dices className={`w-5 h-5 text-slate-950 ${isRolling ? 'animate-dice-roll' : ''}`} />
                 </button>
               </div>
+
+              {isGenerating && (
+                <div className="flex items-center gap-2 text-xs font-mono text-amber-400 animate-pulse">
+                  <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  <span>AI 正在生成冒險主題，請稍候…</span>
+                </div>
+              )}
             </div>
 
             {/* Footer Navigation Buttons */}

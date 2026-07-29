@@ -21,6 +21,8 @@ export interface GameLoopConfig {
     minIntervalMs: number;
     chance: number;
   };
+  autoAdvanceMs?: number;
+  maxDialogueRounds?: number;
 }
 
 export interface AppConfig {
@@ -40,21 +42,28 @@ interface ModelConfig {
 
 let cachedModelConfig: ModelConfig | null = null;
 
-export async function initModelConfig(): Promise<ModelConfig> {
-  try {
-    const res = await fetch('/api/model-config');
-    if (res.ok) {
-      const data = await res.json();
-      cachedModelConfig = {
-        provider: data.provider || '',
-        model: data.model || '',
-        label: data.label || data.model || ''
-      };
-      return cachedModelConfig;
+export async function initModelConfig(options?: { retry?: boolean }): Promise<ModelConfig> {
+  const maxAttempts = options?.retry ? 20 : 1;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetch('/api/model-config');
+      if (res.ok) {
+        const data = await res.json();
+        cachedModelConfig = {
+          provider: data.provider || '',
+          model: data.model || '',
+          label: data.label || data.model || ''
+        };
+        return cachedModelConfig;
+      }
+    } catch {
+      // 後端可能尚未就緒，等一下再重試
     }
-  } catch {
-    console.warn('[ModelConfig] 無法從伺服器取得模型設定，使用預設值');
+    if (attempt < maxAttempts - 1) {
+      await new Promise(r => setTimeout(r, 1500));
+    }
   }
+  console.warn('[ModelConfig] 無法從伺服器取得模型設定，使用預設值');
   cachedModelConfig = { provider: '', model: '', label: '' };
   return cachedModelConfig;
 }
@@ -109,9 +118,11 @@ export function getGameLoopConfig(): GameLoopConfig {
       stayDesk: 0.4
     },
     dialogueTrigger: {
-      minIntervalMs: 6000,
+      minIntervalMs: 3000,
       chance: 0.4
-    }
+    },
+    autoAdvanceMs: 3000,
+    maxDialogueRounds: 20
   };
 
   if (config && config.gameLoop) {
@@ -125,7 +136,9 @@ export function getGameLoopConfig(): GameLoopConfig {
       dialogueTrigger: {
         minIntervalMs: config.gameLoop.dialogueTrigger?.minIntervalMs ?? defaultLoop.dialogueTrigger.minIntervalMs,
         chance: config.gameLoop.dialogueTrigger?.chance ?? defaultLoop.dialogueTrigger.chance
-      }
+      },
+      autoAdvanceMs: (config.gameLoop as any).autoAdvanceMs ?? defaultLoop.autoAdvanceMs,
+      maxDialogueRounds: (config.gameLoop as any).maxDialogueRounds ?? defaultLoop.maxDialogueRounds
     };
   }
 

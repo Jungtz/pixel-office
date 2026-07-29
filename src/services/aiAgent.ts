@@ -199,31 +199,41 @@ export async function fetchLLMResponse(
   console.log(`[Client AI Agent] Requesting LLM for ${speakerName} (${speakerRole}) via "${config.provider}"...`);
 
   try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        providerId: config.provider,
-        model: config.model,
-        speakerRole,
-        speakerName,
-        contextMessages,
-        topic,
-        sceneData
-      })
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-    if (response.ok) {
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await response.json();
-        if (data.status === 'success' && data.text && typeof data.text === 'string') {
-          console.log(`[Client AI Agent] Received LLM response for ${speakerName}: "${data.text}"`);
-          return data.text;
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          providerId: config.provider,
+          model: config.model,
+          speakerRole,
+          speakerName,
+          contextMessages,
+          topic,
+          sceneData
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          if (data.status === 'success' && data.text && typeof data.text === 'string') {
+            console.log(`[Client AI Agent] Received LLM response for ${speakerName}: "${data.text}"`);
+            return data.text;
+          }
         }
       }
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      throw fetchErr;
     }
   } catch (err) {
     console.warn('[Client AI Agent Error] Backend API call failed, fallback to mock:', err);

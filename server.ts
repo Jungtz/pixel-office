@@ -59,6 +59,9 @@ interface SceneData {
   totalPeople: number;
   members: string;
   topic?: string;
+  roundNumber?: number;
+  maxRounds?: number;
+  remaining?: number;
 }
 
 function loadScenePrompt(data: SceneData): string {
@@ -72,16 +75,29 @@ function loadScenePrompt(data: SceneData): string {
     }
   }
   if (!template) {
-    template = '【AI 辦公室大亂鬥 — 當前場景】\n現在時間：{{time}}\n辦公室成員（共 {{totalPeople}} 人）：\n{{members}}\n{{topicLine}}';
+    template = '【AI 辦公室大亂鬥 — 當前場景】\n現在時間：{{time}}\n辦公室成員（共 {{totalPeople}} 人）：\n{{members}}\n{{topicLine}}{{roundInfo}}';
   }
 
   const topicLine = data.topic ? `目前討論主題：「${data.topic}」` : '目前無特定討論主題。';
+
+  let roundInfo = '';
+  if (data.roundNumber && data.maxRounds && data.maxRounds > 0) {
+    const remaining = data.remaining ?? (data.maxRounds - data.roundNumber + 1);
+    if (remaining <= 1) {
+      roundInfo = `\n\n⚡ 這是最後一輪發言！你必須說出告別語或最終結論，為整場討論劃下句點。不要 @點名任何人，讓對話自然結束。`;
+    } else if (remaining <= data.totalPeople) {
+      roundInfo = `\n\n⚠️ 對話進入收尾階段，僅剩 ${remaining} 輪！你必須針對主題做出個人結論或建議，不要再提出新問題或 @點名他人發起新話題。`;
+    } else {
+      roundInfo = `\n（第 ${data.roundNumber} / ${data.maxRounds} 輪）`;
+    }
+  }
 
   return template
     .replace('{{time}}', data.time)
     .replace('{{totalPeople}}', String(data.totalPeople))
     .replace('{{members}}', data.members)
-    .replace('{{topicLine}}', topicLine);
+    .replace('{{topicLine}}', topicLine)
+    .replace('{{roundInfo}}', roundInfo);
 }
 
 /**
@@ -173,22 +189,28 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     } else {
       const basePrompt = loadRolePrompt(speakerRole);
       const sceneBlock = sceneData ? `\n\n${loadScenePrompt(sceneData)}` : '';
-      systemPrompt = `${basePrompt} 你現在的名字是 ${speakerName}。請以一到兩句話繁體中文簡短回答，保持極強的人物性格特點。不要輸出前綴。${sceneBlock}`;
+
+      let topicLine = '';
+      let memberNamesStr = '';
+      if (topic) {
+        memberNamesStr = sceneData?.members
+          ? sceneData.members.split('\n').map(line => {
+              const m = line.match(/\]\s+(\S+)/);
+              return m ? m[1] : '';
+            }).filter(Boolean).join('、')
+          : '';
+        topicLine = `當前討論主題：「${topic}」\n`;
+      }
+
+      systemPrompt = `${basePrompt}\n\n${topicLine}${sceneBlock}\n\n【重要】你現在的名字是 ${speakerName}。請直接針對對話紀錄中上一人的發言內容做出具體回應，不要離題自說自話，不要重述主題或角色設定。保持一到兩句話繁體中文，展現角色性格。若需點名請使用實際成員名稱（${memberNamesStr}），不要自己編造不存在的人名。你的回覆中絕對不要包含你自己的名字或任何前綴（例如「BOSS_1 (BOSS):」），直接輸出純對話內容。`;
       console.log(`[SceneCtx] : ${sceneData ? `已載入 (${sceneData.totalPeople}人, ${sceneData.time})` : '無場景資訊'}`);
       messagesPayload = [
         { role: 'system', content: systemPrompt },
-        ...(contextMessages || []).slice(-5).map((m: any) => ({
+        ...(contextMessages || []).slice(-8).map((m: any) => ({
           role: m.speakerRole === speakerRole ? 'assistant' : 'user',
-          content: `${m.speakerName} (${m.speakerRole}): ${m.text}`
+          content: `[${m.speakerName}] ${m.text}`
         }))
       ];
-
-      if (topic) {
-        messagesPayload.push({
-          role: 'user',
-          content: `當前辦公室討論主題是：「${topic}」。請完全以你專屬的職位視角與性格，針對該主題發表你原創的一兩句話看法（絕不要複製或重複他人發言與標題文字）。若認為某個職位的人特別適合接續回應，可在結尾加上 @PM、@RD、@QA 等點名。`
-        });
-      }
 
     }
 
@@ -211,34 +233,44 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       if (topic) console.log(`[Topic]    : ${topic}`);
     }
 
+    const LLM_TIMEOUT_MS = 120000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
     let response: any;
-    if (provider.sdk === 'ollama') {
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${provider.apiKey}`
-        },
-        body: JSON.stringify({
-          model: activeModel || 'gemma4:31b-cloud',
-          messages: messagesPayload,
-          stream: false
-        })
-      });
-    } else {
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${provider.apiKey}`
-        },
-        body: JSON.stringify({
-          model: activeModel || 'gpt-3.5-turbo',
-          messages: messagesPayload,
-          max_tokens: 150,
-          temperature: 0.8
-        })
-      });
+    try {
+      if (provider.sdk === 'ollama') {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${provider.apiKey}`
+          },
+          body: JSON.stringify({
+            model: activeModel || 'gemma4:31b-cloud',
+            messages: messagesPayload,
+            stream: false
+          }),
+          signal: controller.signal
+        });
+      } else {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${provider.apiKey}`
+          },
+          body: JSON.stringify({
+            model: activeModel || 'gpt-3.5-turbo',
+            messages: messagesPayload,
+            max_tokens: 150,
+            temperature: 0.8
+          }),
+          signal: controller.signal
+        });
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     console.log(`[HTTP Status]: ${response.status} ${response.statusText}`);
@@ -251,7 +283,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
     const text = data.message?.content || data.choices?.[0]?.message?.content;
     if (text && typeof text === 'string') {
-      const cleanResult = text.replace(/["「」]/g, '').trim();
+      const cleanResult = text
+        .replace(/^[\w_]+(\s*\([^)]*\))?\s*:\s*/g, '')
+        .replace(/["「」]/g, '')
+        .trim();
       if (isTopicGen) {
         console.log(`[AI Topic Result]: "${cleanResult}"`);
         console.log('=========================================================\n');
