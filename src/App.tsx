@@ -225,7 +225,7 @@ export const App: React.FC = () => {
     setTimeout(async () => {
       const pmOrBoss = agents.find(a => a.role === 'PM' || a.role === 'BOSS') || agents[0];
       if (pmOrBoss) {
-        await triggerAgentSpeech(pmOrBoss, `召開會議主題：${topic}`);
+        await triggerAgentSpeech(pmOrBoss, topic);
       }
     }, 1500);
   };
@@ -236,9 +236,10 @@ export const App: React.FC = () => {
     setCurrentTopic(task);
     const pm = agents.find(a => a.role === 'PM') || agents[0];
     if (pm) {
-      await triggerAgentSpeech(pm, `緊急任務通知：${task}`);
+      await triggerAgentSpeech(pm, task);
     }
   };
+
 
   // 6. 隨機爆發事件 (Random Incident)
   const handleTriggerRandomEvent = () => {

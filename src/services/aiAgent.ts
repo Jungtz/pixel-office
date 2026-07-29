@@ -46,7 +46,7 @@ const MOCK_DIALOGUE_SCRIPTS: Record<string, string[]> = {
   ]
 };
 
-// 角色專屬多樣化主題回應庫 (消除重複機器人發言)
+// 一般專案主題對話範本
 const ROLE_TOPIC_TEMPLATES: Record<RoleType, string[]> = {
   PM: [
     '關於「{topic}」，我先把 Task 拆解到 JIRA 上，大家確認一下排程優先級。',
@@ -87,8 +87,43 @@ const ROLE_TOPIC_TEMPLATES: Record<RoleType, string[]> = {
   ]
 };
 
+// 緊急事件 / Bug / 崩潰 / 瓶頸對話範本 (專屬語境與反應)
+const ROLE_INCIDENT_TEMPLATES: Record<RoleType, string[]> = {
+  PM: [
+    '針對緊急事件「{topic}」，優先級拉到 P0！大家立刻暫停次要工作，成立 War Room 專注修復！',
+    '這個「{topic}」影響範圍很大，我先通知客服與客戶管理團隊發佈維護公告！',
+    '大家搶修「{topic}」辛苦了，有任何資源需要協調我第一時間協助！'
+  ],
+  RD: [
+    '「{topic}」我看一下 Sentry Log 與 Console 堆疊日誌... 好像是狀態沒處理到 null 值。',
+    '關於「{topic}」，在我的 Local 環境成功復現了！我現在切 Hotfix Branch 進行防禦性程式碼修正。',
+    '已開出針對「{topic}」的修補 PR，請 QA 與 PM 幫忙核對並驗證！'
+  ],
+  QA: [
+    '我抓到了！「{topic}」的復現步驟已整理好，連擊按鈕就會觸發未擷取的 Exception！',
+    '正在針對「{topic}」進行全套邊界條件與迴歸測試，確保修復不會引發其他 Side Effect！',
+    '針對「{topic}」的 Hotfix 測試已通過，可以安心發佈至 Production！'
+  ],
+  UIUX: [
+    '「{topic}」出現畫面白屏非常傷使用者體驗！我補個友善的載入與錯誤提示畫面！',
+    '畫面崩潰時的提示動畫與引導復原按鈕，我已經更新設計樣式給 RD 參考。'
+  ],
+  AD: [
+    '「{topic}」白屏太掃興了！我來繪製一個幽默趣味的維護中 Banner 緩解使用者情緒！',
+    '崩潰畫面的吉祥物視覺我已急件補上，讓使用者看到至少笑一下！'
+  ],
+  INTERN: [
+    '學長！「{topic}」需要我幫忙開 Ticket、記錄 Console Log 或是輔助重現嗎？',
+    '對不起學長！這個問題好像和我昨天動到的模組有關，我現在立刻幫忙對照 Diff！'
+  ],
+  BOSS: [
+    '「{topic}」非常嚴重！相關團隊全力搶修，問題沒解決前大家都不要走！',
+    '搶修「{topic}」辛苦了！今晚加班費照算，宵夜拿鐵我買單，大家加油把難關渡過！'
+  ]
+};
+
 /**
- * 產生 Mock 對話回應 (支援豐富的多樣化主題範本)
+ * 產生 Mock 對話回應 (支援一般專案與緊急 Incident 雙重範本庫)
  */
 export function generateMockResponse(
   speaker: AgentCharacter,
@@ -98,15 +133,19 @@ export function generateMockResponse(
   const roleInfo = ROLE_CONFIGS[speaker.role] || ROLE_CONFIGS['RD'];
   const catchphrases = roleInfo.catchphrases || ['大家一起加油！'];
 
-  // 1. 如果有特定主題 (優先挑選角色專屬主題範本)
+  // 1. 如果有特定主題 (根據主題性質分配一般範本或緊急 Incident 範本)
   if (topic) {
-    const templates = ROLE_TOPIC_TEMPLATES[speaker.role];
+    const cleanTopic = topic.replace(/^(緊急任務通知|召開會議主題|團隊核心目標)：\s*/, '');
+    const isIncident = /Bug|崩潰|白屏|錯誤|漏洞|瓶頸|500|緊急|Hotfix/i.test(cleanTopic);
+    const templatePool = isIncident ? ROLE_INCIDENT_TEMPLATES[speaker.role] : ROLE_TOPIC_TEMPLATES[speaker.role];
+    const templates = templatePool || ROLE_TOPIC_TEMPLATES[speaker.role];
+
     if (templates && templates.length > 0) {
       const idx = Math.floor(Math.random() * templates.length);
       const rawTpl = templates[idx] || templates[0];
-      return rawTpl.replace('{topic}', topic);
+      return rawTpl.replace('{topic}', cleanTopic);
     }
-    return `關於「${topic}」，我這邊沒問題，大家準備好各自分工，全力完成目標！`;
+    return `關於「${cleanTopic}」，我這邊沒問題，大家準備好各自分工，全力完成目標！`;
   }
 
   // 2. 如果前一句對話有人講話，進行回應
