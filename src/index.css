@@ -1,0 +1,102 @@
+/* 復古 JRPG 2D 像素遊戲 全域樣式與彈窗動畫 */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #020617;
+  color: #f8fafc;
+  font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.font-pixel {
+  font-family: 'Press Start 2P', 'DotGothic16', monospace;
+}
+
+/* Base Utility Classes */
+.bg-slate-950 { background-color: #020617; }
+.bg-slate-900 { background-color: #0f172a; }
+.bg-slate-800 { background-color: #1e293b; }
+.bg-amber-400 { background-color: #fbbf24; }
+.bg-amber-500 { background-color: #f59e0b; }
+
+.border-amber-400 { border-color: #fbbf24; }
+.border-amber-500 { border-color: #f59e0b; }
+.border-slate-800 { border-color: #1e293b; }
+.border-slate-700 { border-color: #334155; }
+
+.text-amber-300 { color: #fde047; }
+.text-amber-400 { color: #fbbf24; }
+.text-slate-100 { color: #f8fafc; }
+.text-slate-300 { color: #cbd5e1; }
+.text-slate-400 { color: #94a3b8; }
+.text-slate-500 { color: #64748b; }
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideLeft {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #fbbf24;
+}

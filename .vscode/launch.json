@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "⚡ F5 啟動辦公室遊戲 (Launch Chrome/Edge)",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "npm: dev"
+    }
+  ]
+}
