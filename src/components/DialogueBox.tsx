@@ -306,7 +306,6 @@ export const DialogueBox: React.FC<DialogueBoxProps> = ({
                         {countdown > 0 && (
                           <span className="text-[10px] text-slate-600 ml-0.5">({countdown}s)</span>
                         )}
-                        <ChevronRight className="w-3.5 h-3.5" />
                       </>
                     )}
                   </button>

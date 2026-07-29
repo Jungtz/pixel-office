@@ -6,6 +6,8 @@ import { fetchLLMResponse, LLMConfig } from './services/aiAgent';
 import { getProviderList, getProviderById, getGameLoopConfig } from './services/configService';
 import { ROLE_CONFIGS } from './services/roles';
 import { soundManager } from './services/sound';
+import { tickBehavior } from './game/behaviorEngine';
+import { triggerRandomEvent } from './game/events';
 
 import { OfficeCanvas } from './components/OfficeCanvas';
 import { ControlPanel } from './components/ControlPanel';
@@ -54,6 +56,9 @@ export const App: React.FC = () => {
   const activeDialogueRef = useRef<boolean>(false);
   const userTurnPendingRef = useRef<boolean>(false);
   const [isBusyGenerating, setIsBusyGenerating] = useState<boolean>(false);
+
+  const lastBehaviorTick = useRef<number>(Date.now());
+  const lastEventTime = useRef<number>(Date.now());
 
   useEffect(() => {
     activeDialogueRef.current = activeDialogue !== null;
@@ -113,10 +118,20 @@ export const App: React.FC = () => {
           deskPos: { ...deskPos },
           isUser: isUserAgent,
           stats: {
-            stress: Math.floor(Math.random() * 40 + 20),
-            coffeeLevel: Math.floor(Math.random() * 50 + 50),
+            stress: Math.floor(Math.random() * 15 + 10),
+            coffeeLevel: Math.floor(Math.random() * 30 + 60),
             workProgress: 0
-          }
+          },
+          needs: {
+            energy: Math.floor(Math.random() * 25 + 65),
+            caffeine: Math.floor(Math.random() * 25 + 60),
+            social: Math.floor(Math.random() * 30 + 45)
+          },
+          activityStartTime: 0,
+          activityDuration: 0,
+          emojiBubble: null,
+          emojiTimer: 0,
+          actionTargetId: null
         });
       }
     });
@@ -125,6 +140,8 @@ export const App: React.FC = () => {
     setIsTopicOpen(false);
     dialogueRoundCount.current = 0;
     setRoundsExhausted(false);
+    lastBehaviorTick.current = Date.now();
+    lastEventTime.current = Date.now();
 
     // 遊戲啟動宣告開場主題 (由 Boss 或 PM 進行開場引言)
     setTimeout(() => {
@@ -147,67 +164,59 @@ export const App: React.FC = () => {
       if (meetingState.isActive) return;
 
       const now = Date.now();
-      // 隨機挑選一個閒置 Agent 進行移動或倒咖啡
-      const idleAgents = agents.filter(a => a.path.length === 0);
-      if (idleAgents.length === 0) return;
+      const deltaSeconds = Math.min((now - lastBehaviorTick.current) / 1000, 10);
+      lastBehaviorTick.current = now;
 
-      const randomAgent = idleAgents[Math.floor(Math.random() * idleAgents.length)];
+      // 建立 agents 的可變動副本（深拷貝 needs 與 stats 避免直接 mutation）
+      const updatedAgents = agents.map(a => ({
+        ...a,
+        needs: { ...a.needs },
+        stats: { ...a.stats }
+      }));
 
-      const { goCoffee, visitColleague } = loopConfig.behaviorWeights;
-      const goSofa = 0.15;
-      const goWhiteboard = 0.10;
-      const goWaterCooler = 0.15;
+      let anyBehaviorChange = false;
 
-      const distToDesk = Math.abs(randomAgent.gridPos.x - randomAgent.deskPos.x) +
-                         Math.abs(randomAgent.gridPos.y - randomAgent.deskPos.y);
+      // 需求驅動行為引擎：逐個 agent tick
+      for (const agent of updatedAgents) {
+        if (agent.path.length > 0) continue;
 
-      // 在座位附近 → 大多待著工作，只有 20% 機率起身
-      if (distToDesk <= 2 && Math.random() > 0.2) return;
+        const decision = tickBehavior(agent, updatedAgents, deltaSeconds);
+        if (!decision) continue;
 
-      // 遠離座位 → 65% 機率先回座位
-      if (distToDesk > 2 && Math.random() < 0.65) {
-        const path = findPath(map, randomAgent.gridPos, randomAgent.deskPos);
-        if (path.length > 0) { updateAgentPath(randomAgent.id, path, 'walking'); }
-        return;
+        if (decision.action === 'move' && decision.targetPos) {
+          const path = findPath(map, agent.gridPos, decision.targetPos);
+          if (path.length > 0) {
+            agent.path = path;
+          }
+        }
+
+        agent.status = decision.status;
+        if (decision.activityDuration) {
+          agent.activityDuration = decision.activityDuration;
+          agent.activityStartTime = now;
+        }
+        if (decision.emojiBubble) {
+          agent.emojiBubble = decision.emojiBubble;
+          agent.emojiTimer = 3;
+        }
+        if (decision.actionTargetId) {
+          agent.actionTargetId = decision.actionTargetId;
+        }
+
+        anyBehaviorChange = true;
       }
 
-      const rand = Math.random();
+      // 隨機事件系統
+      if (now - lastEventTime.current > 30000 + Math.random() * 30000) {
+        const event = triggerRandomEvent(updatedAgents);
+        if (event) {
+          lastEventTime.current = now;
+          anyBehaviorChange = true;
+        }
+      }
 
-      if (rand < goCoffee) {
-        const distToCoffee = Math.abs(randomAgent.gridPos.x - OFFICE_LOCATIONS.coffeeMachine.x) +
-                             Math.abs(randomAgent.gridPos.y - OFFICE_LOCATIONS.coffeeMachine.y);
-        if (distToCoffee > 2) {
-          const path = findPath(map, randomAgent.gridPos, OFFICE_LOCATIONS.coffeeMachine);
-          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'coffee');
-        }
-      } else if (rand < goCoffee + visitColleague) {
-        const otherAgents = agents.filter(a => a.id !== randomAgent.id);
-        if (otherAgents.length > 0) {
-          const colleague = otherAgents[Math.floor(Math.random() * otherAgents.length)];
-          const path = findPath(map, randomAgent.gridPos, colleague.gridPos);
-          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'walking');
-        }
-      } else if (rand < goCoffee + visitColleague + goSofa) {
-        const spot = OFFICE_LOCATIONS.sofaArea[Math.floor(Math.random() * OFFICE_LOCATIONS.sofaArea.length)];
-        const dist = Math.abs(randomAgent.gridPos.x - spot.x) + Math.abs(randomAgent.gridPos.y - spot.y);
-        if (dist > 1) {
-          const path = findPath(map, randomAgent.gridPos, spot);
-          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'walking');
-        }
-      } else if (rand < goCoffee + visitColleague + goSofa + goWhiteboard) {
-        const dist = Math.abs(randomAgent.gridPos.x - OFFICE_LOCATIONS.whiteboard.x) +
-                     Math.abs(randomAgent.gridPos.y - OFFICE_LOCATIONS.whiteboard.y);
-        if (dist > 1) {
-          const path = findPath(map, randomAgent.gridPos, OFFICE_LOCATIONS.whiteboard);
-          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'walking');
-        }
-      } else if (rand < goCoffee + visitColleague + goSofa + goWhiteboard + goWaterCooler) {
-        const dist = Math.abs(randomAgent.gridPos.x - OFFICE_LOCATIONS.waterCooler.x) +
-                     Math.abs(randomAgent.gridPos.y - OFFICE_LOCATIONS.waterCooler.y);
-        if (dist > 1) {
-          const path = findPath(map, randomAgent.gridPos, OFFICE_LOCATIONS.waterCooler);
-          if (path.length > 0) updateAgentPath(randomAgent.id, path, 'walking');
-        }
+      if (anyBehaviorChange) {
+        setAgents(updatedAgents);
       }
 
       // 自動觸發對話 (帶入當前辦公室主題與 config.json 設定)
@@ -223,7 +232,7 @@ export const App: React.FC = () => {
         !maxReached
       ) {
         lastDialogueTime.current = now;
-        const nonUserAgents = agents.filter(a => !a.isUser);
+        const nonUserAgents = updatedAgents.filter(a => !a.isUser);
         if (nonUserAgents.length === 0) return;
         const speaker = nonUserAgents[Math.floor(Math.random() * nonUserAgents.length)];
         triggerAgentSpeech(speaker, currentTopic);
@@ -270,6 +279,9 @@ export const App: React.FC = () => {
         return '（走動中）';
       }
 
+      if (agent.status === 'coffee') return '（正在泡咖啡）';
+      if (agent.status === 'resting') return '（在沙發區休息）';
+      if (agent.status === 'talking') return '（正在和同事聊天）';
       if (isNear(pos, OFFICE_LOCATIONS.coffeeMachine)) return '（在咖啡機前）';
       if (isNear(pos, OFFICE_LOCATIONS.waterCooler)) return '（在飲水機旁）';
       if (isNear(pos, OFFICE_LOCATIONS.whiteboard)) return '（在白板前）';
@@ -596,14 +608,33 @@ export const App: React.FC = () => {
         onDispatchTask={handleDispatchTask}
         onTriggerRandomEvent={handleTriggerRandomEvent}
         onToggleChatLog={() => setIsChatLogOpen(prev => !prev)}
-        onResetSetup={() => setIsSetupOpen(true)}
+        onResetSetup={() => {
+              setActiveDialogue(null);
+              activeDialogueRef.current = false;
+              setUserTurnPending(null);
+              userTurnPendingRef.current = false;
+              setIsChatLogOpen(false);
+              setChatMessages([]);
+              if (meetingState.isActive) {
+                setMeetingState({ isActive: false, topic: '', participants: [], log: [], startTime: 0 });
+              }
+              dialogueRoundCount.current = 0;
+              setRoundsExhausted(false);
+              setIsSetupOpen(true);
+            }}
         isMeetingActive={meetingState.isActive}
         agentCount={agents.length}
         chatMessagesCount={chatMessages.length}
       />
 
       {/* 2D Canvas 遊戲主畫面 */}
-      <div className="flex-1 w-full h-full relative">
+      <div
+        className="flex-1 w-full relative"
+        style={{
+          paddingBottom: (activeDialogue || userTurnPending) ? '195px' : '0',
+          transition: 'padding-bottom 0.25s ease'
+        }}
+      >
         <OfficeCanvas
           map={map}
           agents={agents}

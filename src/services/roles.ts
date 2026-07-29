@@ -70,7 +70,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
   UIUX: {
     id: 'UIUX',
     name: 'UI/UX Designer',
-    title: '使用者體驗設計師 (UI/UX)',
+    title: '設計師 (UI/UX)',
     avatarColor: '#9333ea', // 紫色
     hairColor: '#6b21a8',
     clothingColor: '#7e22ce',
