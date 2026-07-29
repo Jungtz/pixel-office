@@ -341,6 +341,40 @@ export const App: React.FC = () => {
     }
   };
 
+  const applyDialogueAction = (speakerId: string, text: string) => {
+    const nominee = parseNomination(text);
+    if (!nominee || nominee.id === speakerId) return;
+
+    const agent = agents.find(a => a.id === nominee.id);
+    if (!agent || agent.path.length > 0) return;
+
+    let targetPos: Position | null = null;
+    let moveStatus: AgentCharacter['status'] = 'walking';
+
+    if (/咖啡|提神|來一杯/.test(text)) {
+      targetPos = OFFICE_LOCATIONS.coffeeMachine;
+      moveStatus = 'coffee';
+    } else if (/回.*(?:來|去|座位|位子|崗位|工作)/.test(text) || /快回來/.test(text)) {
+      targetPos = agent.deskPos;
+    } else if (/休息|沙發|坐一下/.test(text)) {
+      targetPos = OFFICE_LOCATIONS.sofaArea[0];
+    } else if (/喝水|茶水|飲水機|倒杯水/.test(text)) {
+      targetPos = OFFICE_LOCATIONS.waterCooler;
+    } else if (/白板|討論/.test(text)) {
+      targetPos = OFFICE_LOCATIONS.whiteboard;
+    }
+
+    if (!targetPos) return;
+
+    const dist = Math.abs(agent.gridPos.x - targetPos.x) + Math.abs(agent.gridPos.y - targetPos.y);
+    if (dist <= 1) return;
+
+    const path = findPath(map, agent.gridPos, targetPos);
+    if (path.length > 0) {
+      updateAgentPath(nominee.id, path, moveStatus);
+    }
+  };
+
   const advanceConversation = (speakerId: string, speakerText: string) => {
     const loopCfg = getGameLoopConfig();
     const maxRounds = loopCfg.maxDialogueRounds ?? 0;
@@ -348,6 +382,9 @@ export const App: React.FC = () => {
       setRoundsExhausted(true);
       return;
     }
+
+    // 根據對話中的點名指令，觸發角色實際移動
+    applyDialogueAction(speakerId, speakerText);
 
     const topic = meetingState.topic || currentTopic;
     lastDialogueTime.current = Date.now();
