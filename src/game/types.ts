@@ -76,7 +76,8 @@ export type TileType =
   | 'whiteboard'
   | 'sofa'
   | 'plant'
-  | 'boss_desk';
+  | 'boss_desk'
+  | 'clock';
 
 export interface TileInfo {
   type: TileType;

@@ -43,6 +43,13 @@ export function createDefaultMap(): TileInfo[][] {
         type = 'wall';
         walkable = false;
       }
+
+      // 1.5 時鐘 — 置於頂部牆面正中央 (獨立 if 覆寫 wall)
+      if (x === 12 && y === 0) {
+        type = 'clock';
+        walkable = false;
+        label = 'Wall Clock';
+      }
       // 2. 會議室隔間牆 (x: 14, y: 1~7)
       else if (x === 14 && y >= 1 && y <= 7) {
         if (y !== 4) { // y=4 為會議室門口

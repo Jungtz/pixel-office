@@ -275,6 +275,70 @@ export function drawTile(
     ctx.fillStyle = '#e2e8f0'; // 機身
     ctx.fillRect(6, 16, size - 12, 16);
   }
+  else if (type === 'clock') {
+    const cx = size / 2;
+    const cy = size / 2;
+    const r = 13;
+
+    // 牆面底色
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, size, size);
+
+    // 時鐘本體外框
+    ctx.fillStyle = '#78350f';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 鐘面
+    ctx.fillStyle = '#fef3c7';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // 12 點標記
+    ctx.fillStyle = '#451a03';
+    ctx.fillRect(cx - 1.5, cy - r + 3, 3, 3);
+    // 3 點標記
+    ctx.fillRect(cx + r - 6, cy - 1.5, 3, 3);
+    // 6 點標記
+    ctx.fillRect(cx - 1.5, cy + r - 6, 3, 3);
+    // 9 點標記
+    ctx.fillRect(cx - r + 3, cy - 1.5, 3, 3);
+
+    // 時針 (指向約 10 點方向)
+    ctx.strokeStyle = '#1c1917';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx - 5, cy - 7);
+    ctx.stroke();
+
+    // 分針 (指向約 2 點方向)
+    ctx.strokeStyle = '#44403c';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + 4, cy - 8);
+    ctx.stroke();
+
+    // 中心軸點
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 鐘擺 (下方)
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(cx - 2, cy + r + 1, 4, 5);
+    ctx.fillStyle = '#ca8a04';
+    ctx.beginPath();
+    ctx.arc(cx, cy + r + 7, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.restore();
 }
