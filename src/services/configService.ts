@@ -25,6 +25,7 @@ export interface GameLoopConfig {
 
 export interface AppConfig {
   gameLoop?: GameLoopConfig;
+  models?: { model: string };
   providers?: Record<string, Omit<ProviderDefinition, 'id'>>;
 }
 
@@ -94,4 +95,16 @@ export function getGameLoopConfig(): GameLoopConfig {
   }
 
   return defaultLoop;
+}
+
+export function resolveModel(): string {
+  const modelConfig = config?.models?.model;
+  if (!modelConfig || typeof modelConfig !== 'string') return '';
+
+  if (modelConfig.includes('/')) {
+    return modelConfig;
+  }
+
+  const provider = config?.providers?.[modelConfig];
+  return provider?.defaultModel || '';
 }
