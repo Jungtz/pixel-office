@@ -145,6 +145,48 @@ export function drawCharacterSprite(
     ctx.strokeRect(21, 15 + bounceY, 6, 7);
   }
 
+  // 手機道具（status 為 phone 時顯示）
+  if (status === 'phone') {
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(21, 12 + bounceY, 5, 8);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(22, 13 + bounceY, 3, 3);
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(23, 14 + bounceY, 1, 4);
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(21, 12 + bounceY, 5, 8);
+  }
+
+  // 伸懶腰（status 為 stretch 時顯示上舉手臂）
+  if (status === 'stretch') {
+    ctx.fillStyle = config.clothingColor;
+    ctx.fillRect(7, 7 + bounceY, 3, 6);
+    ctx.fillRect(22, 7 + bounceY, 3, 6);
+    ctx.fillStyle = '#ffdfc4';
+    ctx.fillRect(7, 6 + bounceY, 2, 2);
+    ctx.fillRect(23, 6 + bounceY, 2, 2);
+  }
+
+  // 思考姿勢（status 為 thinking 時，手托下巴）
+  if (status === 'thinking') {
+    ctx.fillStyle = config.clothingColor;
+    ctx.fillRect(21, 14 + bounceY, 3, 6);
+    ctx.fillStyle = '#ffdfc4';
+    ctx.fillRect(22, 12 + bounceY, 2, 2);
+  }
+
+  // 巡視配件（status 為 patrolling 時，手持文件夾）
+  if (status === 'patrolling') {
+    ctx.fillStyle = '#d4a574';
+    ctx.fillRect(21, 14 + bounceY, 4, 6);
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(21, 14 + bounceY, 4, 6);
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(22, 15 + bounceY, 2, 4);
+  }
+
   // 7. DQ 風格邊框細節 (Black Outlines for Pixel Retro Crispness)
   ctx.strokeStyle = '#000000';
   ctx.lineWidth = 1;
