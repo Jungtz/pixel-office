@@ -44,6 +44,16 @@ const EVENT_POOL: EventEffect[] = [
         agent.stats.stress = clampNeed(agent.stats.stress + 25);
         agent.emojiBubble = '🐛';
         agent.emojiTimer = 4;
+        agent.eventMoveTarget = 'desk';
+        agent.eventMoveStatus = 'working';
+      }
+      const pm = agents.find(a => a.role === 'PM');
+      if (pm && pm.path.length === 0) {
+        const rd = affected.find(a => a.role === 'RD');
+        if (rd) {
+          pm.eventMoveTarget = rd.gridPos;
+          pm.eventMoveStatus = 'walking';
+        }
       }
     }
   },
@@ -69,6 +79,8 @@ const EVENT_POOL: EventEffect[] = [
         agent.stats.stress = clampNeed(agent.stats.stress - 20);
         agent.emojiBubble = '🎉';
         agent.emojiTimer = 3;
+        agent.eventMoveTarget = 'sofa';
+        agent.eventMoveStatus = 'resting';
       }
     }
   },
@@ -81,6 +93,11 @@ const EVENT_POOL: EventEffect[] = [
       if (pm) {
         pm.emojiBubble = '😤';
         pm.emojiTimer = 5;
+        if (rds.length > 0 && pm.path.length === 0) {
+          const target = rds[Math.floor(Math.random() * rds.length)];
+          pm.eventMoveTarget = target.gridPos;
+          pm.eventMoveStatus = 'walking';
+        }
       }
       for (const rd of rds) {
         rd.needs.energy = clampNeed(rd.needs.energy - 15);
@@ -121,6 +138,10 @@ const EVENT_POOL: EventEffect[] = [
         intern.emojiBubble = '😱';
         intern.emojiTimer = 5;
         intern.stats.stress = clampNeed(intern.stats.stress + 15);
+        if (intern.path.length === 0) {
+          intern.eventMoveTarget = OFFICE_LOCATIONS.coffeeMachine;
+          intern.eventMoveStatus = 'coffee';
+        }
       }
       const nearby = agents.slice(0, Math.min(3, agents.length));
       for (const agent of nearby) {
@@ -141,6 +162,8 @@ const EVENT_POOL: EventEffect[] = [
         agent.stats.stress = clampNeed(agent.stats.stress + 15);
         agent.emojiBubble = '🚨';
         agent.emojiTimer = 5;
+        agent.eventMoveTarget = 'center';
+        agent.eventMoveStatus = 'walking';
       }
     }
   }

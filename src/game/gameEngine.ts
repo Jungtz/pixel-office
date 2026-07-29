@@ -13,6 +13,7 @@ export class GameEngine {
   private animFrameId: number | null = null;
   private lastTime: number = 0;
   private onAgentClickCb?: (agent: AgentCharacter) => void;
+  private eavesdropTimers: Map<string, number> = new Map();
 
   constructor(canvas: HTMLCanvasElement, map: TileInfo[][]) {
     this.canvas = canvas;
@@ -93,7 +94,13 @@ export class GameEngine {
 
       // 如果有路徑，持續移動
       if (agent.path.length > 0) {
-        agent.status = 'walking';
+        const eavesdropUntil = this.eavesdropTimers.get(agent.id);
+        if (eavesdropUntil && Date.now() < eavesdropUntil) {
+          agent.animFrame = 0;
+        } else {
+          this.eavesdropTimers.delete(agent.id);
+
+          agent.status = 'walking';
         const nextGridPos = agent.path[0];
         const targetPixelX = nextGridPos.x * TILE_SIZE;
         const targetPixelY = nextGridPos.y * TILE_SIZE;
@@ -127,6 +134,7 @@ export class GameEngine {
           // 行走動畫幀交替
           agent.animFrame = Math.floor((performance.now() / 150) % 2);
         }
+        }
       } else {
         // 根據狀態決定動畫幀
         if (agent.status === 'working') {
@@ -135,6 +143,16 @@ export class GameEngine {
           agent.animFrame = Math.floor((performance.now() / 800) % 2);
         } else if (agent.status === 'coffee') {
           agent.animFrame = Math.floor((performance.now() / 500) % 2);
+        } else if (agent.status === 'phone') {
+          agent.animFrame = Math.floor((performance.now() / 600) % 2);
+        } else if (agent.status === 'stretch') {
+          agent.animFrame = Math.floor((performance.now() / 900) % 2);
+        } else if (agent.status === 'daydream') {
+          agent.animFrame = Math.floor((performance.now() / 1200) % 2);
+        } else if (agent.status === 'thinking') {
+          agent.animFrame = Math.floor((performance.now() / 700) % 2);
+        } else if (agent.status === 'patrolling') {
+          agent.animFrame = Math.floor((performance.now() / 300) % 2);
         } else {
           agent.animFrame = 0;
         }
@@ -146,6 +164,8 @@ export class GameEngine {
   }
 
   private detectInteractions() {
+    const now = Date.now();
+
     for (let i = 0; i < this.agents.length; i++) {
       for (let j = i + 1; j < this.agents.length; j++) {
         const a = this.agents[i];
@@ -167,6 +187,13 @@ export class GameEngine {
               a.direction = 'up';
               b.direction = 'down';
             }
+          }
+        }
+
+        if (dist === 1 && (a.status === 'talking' || b.status === 'talking')) {
+          const mover = a.path.length > 0 ? a : (b.path.length > 0 ? b : null);
+          if (mover && !this.eavesdropTimers.has(mover.id)) {
+            this.eavesdropTimers.set(mover.id, now + 2000);
           }
         }
       }

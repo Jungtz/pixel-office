@@ -90,6 +90,7 @@ export const App: React.FC = () => {
 
     const newAgents: AgentCharacter[] = [];
     let deskIdx = 0;
+    const initTime = Date.now();
 
     (Object.keys(pendingConfig.counts) as RoleType[]).forEach(role => {
       const count = pendingConfig.counts[role];
@@ -134,7 +135,11 @@ export const App: React.FC = () => {
           activityDuration: 0,
           emojiBubble: null,
           emojiTimer: 0,
-          actionTargetId: null
+          actionTargetId: null,
+          lastRoleActionTime: initTime,
+          lastIdleActionTime: initTime,
+          eventMoveTarget: null,
+          eventMoveStatus: null
         });
       }
     });
