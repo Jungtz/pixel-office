@@ -12,22 +12,6 @@
     }
   },
   "providers": {
-    "ollama-cloud": {
-      "type": "cloud",
-      "sdk": "ollama",
-      "apiKey": "YOUR_OLLAMA_API_KEY",
-      "description": "Ollama Cloud",
-      "baseURL": "https://ollama.com",
-      "defaultModel": "gemma4:31b-cloud"
-    },
-    "opencode-zen": {
-      "type": "cloud",
-      "sdk": "openai",
-      "apiKey": "YOUR_OPENCODE_API_KEY",
-      "description": "OpenCode Zen",
-      "baseURL": "https://opencode.ai/zen/v1",
-      "defaultModel": "deepseek-v4-flash-free"
-    },
     "agnes-ai": {
       "type": "cloud",
       "sdk": "openai",

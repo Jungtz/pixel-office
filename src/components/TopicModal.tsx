@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LLMConfig, generateMockTopic } from '../services/aiAgent';
 import { soundManager } from '../services/sound';
-import { Sparkles, Dices, ArrowRight, Lightbulb, RefreshCw } from 'lucide-react';
+import { Sparkles, Dices, ArrowRight, Lightbulb } from 'lucide-react';
 
 interface TopicModalProps {
   isOpen: boolean;
@@ -14,9 +14,9 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   llmConfig,
   onConfirmTopic
 }) => {
-
   const [topic, setTopic] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isRolling, setIsRolling] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen && !topic) {
@@ -28,7 +28,13 @@ export const TopicModal: React.FC<TopicModalProps> = ({
 
   const handleRollTopic = async () => {
     soundManager.playSelectSound();
+    setIsRolling(true);
     setIsGenerating(true);
+
+    // 觸發骰子滾動動畫 600ms
+    setTimeout(() => {
+      setIsRolling(false);
+    }, 600);
 
     try {
       if (llmConfig.provider !== 'mock') {
@@ -87,34 +93,34 @@ export const TopicModal: React.FC<TopicModalProps> = ({
       }}
     >
       <div
-        className="bg-slate-900 border-4 border-amber-400 max-w-xl w-full p-1 rounded-sm shadow-2xl animate-scale-up"
-        style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+        className="bg-slate-900 border-4 border-amber-400 max-w-2xl w-full p-1 rounded-sm shadow-2xl animate-scale-up"
+        style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
       >
         <div
           className="bg-slate-950 border-2 border-amber-500/60 p-6 flex flex-col gap-6 overflow-y-auto"
-          style={{ maxHeight: 'calc(90vh - 8px)' }}
+          style={{ maxHeight: 'calc(92vh - 8px)' }}
         >
           {/* Header */}
           <div className="text-center border-b border-slate-800 pb-4">
-            <h1 className="text-xl font-bold text-amber-400 font-mono flex items-center justify-center gap-2 tracking-wider">
-              <Sparkles className="w-5 h-5 text-amber-400" />
+            <h1 className="text-2xl font-bold text-amber-400 font-mono flex items-center justify-center gap-2 tracking-wider">
+              <Sparkles className="w-6 h-6 text-amber-400" />
               本次辦公室冒險主題
             </h1>
             <p className="text-slate-400 text-xs mt-1 font-mono">
-              AI 已根據團隊情境生成任務目標，您可以隨時點擊骰子重擲或直接修改內文。
+              AI 已根據團隊情境生成任務目標，您可以點擊右側骰子 🎲 重新發想或直接修改內文。
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
 
-            {/* 主題輸入與骰子按鈕區域 */}
+            {/* 主題輸入與純圖示骰子按鈕區域 */}
             <div className="bg-slate-900/90 border border-slate-800 p-4 rounded flex flex-col gap-3">
               <label className="text-xs font-mono font-bold text-amber-400 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <Lightbulb className="w-4 h-4 text-amber-400" /> 討論主題 / 冒險任務：
                 </span>
-                <span className="text-[10px] text-slate-500 font-normal">
-                  ({llmConfig.provider.toUpperCase()})
+                <span className="text-[10px] text-slate-500 font-normal font-mono">
+                  模式：{llmConfig.provider.toUpperCase()}
                 </span>
               </label>
 
@@ -127,31 +133,21 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                   className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded px-3 py-2.5 text-sm font-mono text-amber-300 focus:outline-none transition shadow-inner"
                 />
 
-                {/* 骰子按鈕 🎲 */}
+                {/* 純圖示骰子按鈕 🎲 (帶 360 度滾動動畫) */}
                 <button
                   type="button"
                   onClick={handleRollTopic}
-                  disabled={isGenerating}
-                  className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold font-mono text-xs rounded border border-amber-600 shadow transition flex items-center gap-1.5 flex-shrink-0"
+                  disabled={isGenerating || isRolling}
+                  className="w-10 h-10 bg-amber-400 hover:bg-amber-300 border border-amber-500 rounded flex items-center justify-center text-slate-950 shadow transition flex-shrink-0 disabled:opacity-50"
                   title="點擊隨機重擲 AI 主題"
                 >
-                  <Dices className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                  {isGenerating ? '生成中...' : '重擲'}
+                  <Dices className={`w-5 h-5 text-slate-950 ${isRolling ? 'animate-dice-roll' : ''}`} />
                 </button>
               </div>
             </div>
 
-            {/* Footer Buttons */}
-            <div className="flex items-center justify-between border-t border-slate-800 pt-4">
-              <button
-                type="button"
-                onClick={handleRollTopic}
-                disabled={isGenerating}
-                className="px-4 py-2 text-xs font-mono text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded transition flex items-center gap-1.5"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> 換個靈感 🎲
-              </button>
-
+            {/* Footer Submit Button */}
+            <div className="flex items-center justify-end border-t border-slate-800 pt-4">
               <button
                 type="submit"
                 disabled={!topic.trim() || isGenerating}
