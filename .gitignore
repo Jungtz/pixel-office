@@ -39,3 +39,6 @@ lerna-debug.log*
 # Root config file (contains sensitive provider credentials)
 # Ignore the actual config file but keep the example file tracked
 config.json
+
+# Vite temp cache
+*.timestamp-*.mjs

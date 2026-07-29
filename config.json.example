@@ -8,9 +8,11 @@
       "stayDesk": 0.4
     },
     "dialogueTrigger": {
-      "minIntervalMs": 6000,
+      "minIntervalMs": 3000,
       "chance": 0.4
-    }
+    },
+    "autoAdvanceMs": 3000,
+    "maxDialogueRounds": 20
   },
   "models": {
     "label": "Ollama",
