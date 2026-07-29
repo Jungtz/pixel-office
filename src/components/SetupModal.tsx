@@ -16,6 +16,16 @@ interface SetupModalProps {
   onStart: (config: RoleSetupConfig) => void;
 }
 
+const ROLE_SHORT_CODES: Record<RoleType, string> = {
+  PM: 'PM',
+  RD: 'RD',
+  QA: 'QA',
+  UIUX: 'UI',
+  AD: 'AD',
+  INTERN: 'IN',
+  BOSS: 'BO'
+};
+
 export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
   const [counts, setCounts] = useState<Record<RoleType, number>>({
     PM: 1,
@@ -54,8 +64,24 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(2, 6, 23, 0.85)',
+        backdropFilter: 'blur(8px)',
+      }}
+    >
       <div className="bg-slate-900 border-4 border-amber-400 max-w-2xl w-full p-1 rounded-sm shadow-2xl animate-scale-up">
+
         <div className="bg-slate-950 border-2 border-amber-500/60 p-6 flex flex-col gap-6">
           
           {/* Header */}
@@ -88,16 +114,17 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                   >
                     <div className="flex items-center gap-3">
                       <div
-                        className="w-9 h-9 rounded border border-amber-400/80 flex items-center justify-center font-bold text-white text-xs font-mono shadow"
+                        className="w-9 h-9 rounded border border-amber-400/80 flex items-center justify-center font-bold text-white text-xs font-mono shadow flex-shrink-0"
                         style={{ backgroundColor: role.avatarColor }}
                       >
-                        {roleKey}
+                        {ROLE_SHORT_CODES[roleKey]}
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-slate-200 font-mono">{role.name}</div>
-                        <div className="text-[11px] text-slate-400">{role.title}</div>
+                        <div className="text-sm font-bold text-slate-100 font-sans tracking-wide">{role.name}</div>
+                        <div className="text-xs text-slate-400 font-sans mt-0.5">{role.title}</div>
                       </div>
                     </div>
+
 
                     {/* 人數計數器 */}
                     <div className="flex items-center gap-2 bg-slate-950 px-2 py-1 border border-slate-800 rounded">

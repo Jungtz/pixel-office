@@ -229,16 +229,16 @@ export class GameEngine {
     ctx.save();
     ctx.font = '12px "Noto Sans TC", sans-serif';
 
-    const maxLineWidth = 160;
+    const displayText = text.length > 14 ? text.substring(0, 13) + '...' : text;
+    const metrics = ctx.measureText(displayText);
     const padding = 8;
-    const metrics = ctx.measureText(text.length > 25 ? text.substring(0, 23) + '...' : text);
-    const bubbleWidth = Math.min(metrics.width + padding * 2, maxLineWidth);
+    const bubbleWidth = metrics.width + padding * 2;
     const bubbleHeight = 24;
 
-    const bx = x - bubbleWidth / 2;
-    const by = y - bubbleHeight;
+    const bx = Math.round(x - bubbleWidth / 2);
+    const by = Math.round(y - bubbleHeight);
 
-    // 深藍底金邊（DQ 質感）
+    // 深藍底藍框（DQ 質感氣泡）
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(bx, by, bubbleWidth, bubbleHeight);
     ctx.strokeStyle = '#38bdf8';
@@ -258,11 +258,11 @@ export class GameEngine {
     ctx.fillStyle = '#f8fafc';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const displayText = text.length > 25 ? text.substring(0, 23) + '...' : text;
-    ctx.fillText(displayText, x, by + bubbleHeight / 2);
+    ctx.fillText(displayText, x, by + bubbleHeight / 2 + 1);
 
     ctx.restore();
   }
+
 
   /**
    * 處理 Canvas 點擊 Event (選取角色)

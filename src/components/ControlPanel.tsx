@@ -58,8 +58,20 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   return (
     <>
       {/* 頂部 DQ 風格頂列 */}
-      <header className="fixed top-3 left-1/2 -translate-x-1/2 z-30 w-[95%] max-w-6xl">
+      <header
+        className="fixed top-3 left-1/2 -translate-x-1/2 z-30 w-[95%] max-w-6xl"
+        style={{
+          position: 'fixed',
+          top: '12px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 30,
+          width: '95%',
+          maxWidth: '1152px'
+        }}
+      >
         <div className="bg-slate-900 border-2 border-amber-400 p-1 shadow-2xl rounded-sm">
+
           <div className="bg-slate-950 border border-amber-500/50 px-4 py-2 flex flex-wrap items-center justify-between gap-3">
             
             {/* Title & Status */}
