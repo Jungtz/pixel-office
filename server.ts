@@ -113,13 +113,46 @@ app.get('/api/providers', (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/model-config — 回傳 models 設定（不洩漏 apiKey）
+ */
+app.get('/api/model-config', (req: Request, res: Response) => {
+  const config = loadConfig();
+  const modelsConfig = config.models;
+  const modelConfig = modelsConfig?.model;
+
+  if (!modelConfig || typeof modelConfig !== 'string') {
+    return res.json({ provider: '', model: '', label: '' });
+  }
+
+  if (modelConfig.includes('/')) {
+    const slashIdx = modelConfig.indexOf('/');
+    const providerId = modelConfig.slice(0, slashIdx);
+    const modelName = modelConfig.slice(slashIdx + 1);
+    return res.json({
+      provider: providerId,
+      model: modelName,
+      label: modelsConfig?.label || modelName
+    });
+  }
+
+  const provider = config.providers?.[modelConfig];
+  const fallbackModel = provider?.defaultModel || '';
+  return res.json({
+    provider: modelConfig,
+    model: fallbackModel,
+    label: modelsConfig?.label || fallbackModel
+  });
+});
+
+/**
  * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (支援角色發言與 🎲 AI 主題自動發想)
  */
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
-    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData } = req.body;
+    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData, model: requestedModel } = req.body;
     const config = loadConfig();
     const provider = config.providers?.[providerId];
+    const activeModel = requestedModel || provider?.defaultModel || '';
 
     const isTopicGen = speakerRole === 'TOPIC' || speakerName === 'TopicGenerator';
 
@@ -166,14 +199,14 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     if (isTopicGen) {
       console.log('\n=================== 🎲 AI Topic Generation ===================');
       console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
-      console.log(`[SDK/Model]: ${provider.sdk} / ${provider.defaultModel}`);
+      console.log(`[SDK/Model]: ${provider.sdk} / ${activeModel || provider.defaultModel}`);
       console.log(`[Endpoint] : ${endpoint}`);
     } else {
       console.log('\n=================== 🤖 LLM Request ===================');
       console.log(`[Speaker]  : ${speakerName} (${speakerRole})`);
       console.log(`[Prompt MD]: src/prompts/${speakerRole.toLowerCase()}.md`);
       console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
-      console.log(`[SDK/Model]: ${provider.sdk} / ${provider.defaultModel}`);
+      console.log(`[SDK/Model]: ${provider.sdk} / ${activeModel || provider.defaultModel}`);
       console.log(`[Endpoint] : ${endpoint}`);
       if (topic) console.log(`[Topic]    : ${topic}`);
     }
@@ -187,7 +220,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           'Authorization': `Bearer ${provider.apiKey}`
         },
         body: JSON.stringify({
-          model: provider.defaultModel || 'gemma4:31b-cloud',
+          model: activeModel || 'gemma4:31b-cloud',
           messages: messagesPayload,
           stream: false
         })
@@ -200,7 +233,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           'Authorization': `Bearer ${provider.apiKey}`
         },
         body: JSON.stringify({
-          model: provider.defaultModel || 'gpt-3.5-turbo',
+          model: activeModel || 'gpt-3.5-turbo',
           messages: messagesPayload,
           max_tokens: 150,
           temperature: 0.8
