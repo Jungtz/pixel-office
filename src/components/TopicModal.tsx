@@ -47,9 +47,10 @@ export const TopicModal: React.FC<TopicModalProps> = ({
             providerId: llmConfig.provider,
             speakerRole: 'BOSS',
             speakerName: 'System',
-            topic: '產生一個熱門且有挑戰性的科技公司辦公室專案討論主題'
+            topic: '請產生一個繁體中文 15 字以內的科技公司辦公室專案討論主題（例如：客戶緊急反饋效能瓶頸處置、準備週五封版發佈）。直接輸出主題名稱即可，不要輸出任何額外說明與引號。'
           })
         });
+
 
         if (res.ok) {
           const data = await res.json();
