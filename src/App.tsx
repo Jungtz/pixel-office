@@ -152,12 +152,26 @@ export const App: React.FC = () => {
       if (idleAgents.length === 0) return;
 
       const randomAgent = idleAgents[Math.floor(Math.random() * idleAgents.length)];
-      const rand = Math.random();
 
       const { goCoffee, visitColleague } = loopConfig.behaviorWeights;
       const goSofa = 0.15;
       const goWhiteboard = 0.10;
       const goWaterCooler = 0.15;
+
+      const distToDesk = Math.abs(randomAgent.gridPos.x - randomAgent.deskPos.x) +
+                         Math.abs(randomAgent.gridPos.y - randomAgent.deskPos.y);
+
+      // 在座位附近 → 大多待著工作，只有 20% 機率起身
+      if (distToDesk <= 2 && Math.random() > 0.2) return;
+
+      // 遠離座位 → 65% 機率先回座位
+      if (distToDesk > 2 && Math.random() < 0.65) {
+        const path = findPath(map, randomAgent.gridPos, randomAgent.deskPos);
+        if (path.length > 0) { updateAgentPath(randomAgent.id, path, 'walking'); }
+        return;
+      }
+
+      const rand = Math.random();
 
       if (rand < goCoffee) {
         const distToCoffee = Math.abs(randomAgent.gridPos.x - OFFICE_LOCATIONS.coffeeMachine.x) +
