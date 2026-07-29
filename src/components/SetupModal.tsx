@@ -192,13 +192,11 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                 <ShieldAlert className="w-4 h-4 text-amber-400" /> AI 對話驅動模式 (已整合 config.json Providers)：
               </label>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {providers.map(prov => {
+              <div className="grid grid-cols-2 gap-2">
+                {providers.filter(p => p.id === 'mock' || p.id === 'agnes-ai').map(prov => {
                   const isSelected = selectedProviderId === prov.id;
                   let icon = '⚡';
-                  if (prov.id === 'ollama-cloud') icon = '🦙';
-                  else if (prov.id === 'opencode-zen') icon = '🚀';
-                  else if (prov.id === 'agnes-ai') icon = '✨';
+                  if (prov.id === 'agnes-ai') icon = '✨';
 
                   return (
                     <button
@@ -212,7 +210,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                       }`}
                     >
                       <span className="font-bold text-xs flex items-center gap-1">
-                        <span>{icon}</span> {prov.description}
+                        <span>{icon}</span> {prov.id === 'mock' ? 'Mock' : 'AI'}
                       </span>
                       {prov.defaultModel && prov.id !== 'mock' && (
                         <span className={`text-[10px] ${isSelected ? 'text-slate-900 font-bold' : 'text-slate-500'} font-mono`}>
