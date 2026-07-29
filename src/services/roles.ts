@@ -26,7 +26,8 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '客戶說這個需求很急，今天一定要看到！',
       '可以先做 MVP (最小可行性產品) 嗎？'
     ],
-    systemPrompt: PM_PROMPT
+    systemPrompt: PM_PROMPT,
+    interests: ['時程', '進度', '需求', '客戶', '上線', '發布', 'ETA', 'release', 'deadline', 'milestone', '預算', '資源', '排程']
   },
   RD: {
     id: 'RD',
@@ -44,7 +45,8 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '請給我具體的 Steps to Reproduce。',
       '再給我兩杯 Espresso，我今晚把這個 PR 拼出來。'
     ],
-    systemPrompt: RD_PROMPT
+    systemPrompt: RD_PROMPT,
+    interests: ['架構', '效能', '重構', 'bug', '技術', '程式', 'PR', 'refactor', 'performance', '程式碼', '部署', '後端', '資料庫']
   },
   QA: {
     id: 'QA',
@@ -62,7 +64,8 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '請不要在正式環境狂測，測試環境打不開了。',
       '驗收沒過，給我不准上線！'
     ],
-    systemPrompt: QA_PROMPT
+    systemPrompt: QA_PROMPT,
+    interests: ['測試', 'bug', '缺陷', '品質', '驗收', 'edge case', 'issue', 'crash', '錯誤', '穩定', '回歸', '安全']
   },
   UIUX: {
     id: 'UIUX',
@@ -80,7 +83,8 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '使用者不會這樣點擊的，UX 流程不順！',
       '別用瀏覽器原生樣式，太醜了！'
     ],
-    systemPrompt: UIUX_PROMPT
+    systemPrompt: UIUX_PROMPT,
+    interests: ['設計', 'UI', 'UX', '介面', '視覺', 'figma', '使用者體驗', '動畫', '排版', '元件', '色調', '流程']
   },
   AD: {
     id: 'AD',
@@ -98,7 +102,8 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '這顏色太死板，要有生命力與情緒渲染！',
       '整體視覺靈魂還沒出來，再調！'
     ],
-    systemPrompt: AD_PROMPT
+    systemPrompt: AD_PROMPT,
+    interests: ['視覺', '品牌', '創意', '風格', '設計', '畫面', '美感', '形象', '色彩', '意象']
   },
   INTERN: {
     id: 'INTERN',
@@ -116,7 +121,8 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       '請問 Git rebase 失敗要怎麼辦...？',
       '大家辛苦了，要喝飲料嗎？我訂手搖飲！'
     ],
-    systemPrompt: INTERN_PROMPT
+    systemPrompt: INTERN_PROMPT,
+    interests: ['學習', '幫忙', '支援', '文件', '新手', '請教', '工具', '練習']
   },
   BOSS: {
     id: 'BOSS',
@@ -134,6 +140,7 @@ export const ROLE_CONFIGS: Record<RoleType, RoleConfig> = {
       'AI 時代到了，我們要全面 Embracing AI！',
       '這週大家辛苦一下，勝敗在此一舉！'
     ],
-    systemPrompt: BOSS_PROMPT
+    systemPrompt: BOSS_PROMPT,
+    interests: ['商業', '策略', 'ROI', '預算', '市場', '目標', '願景', '營收', '成長', '融資', '投資', '方向']
   }
 };

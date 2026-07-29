@@ -15,6 +15,7 @@ export interface RoleConfig {
   personality: string;
   catchphrases: string[];
   systemPrompt: string;
+  interests: string[];
 }
 
 export interface Position {
