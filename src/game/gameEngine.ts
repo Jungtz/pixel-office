@@ -143,10 +143,11 @@ export class GameEngine {
     ctx.translate(offsetX, offsetY);
 
     // 1. 繪製辦公室 Tilemap
+    const now = new Date();
     for (let y = 0; y < MAP_HEIGHT; y++) {
       for (let x = 0; x < MAP_WIDTH; x++) {
         const tile = this.map[y][x];
-        drawTile(ctx, tile.type, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE);
+        drawTile(ctx, tile.type, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, now);
       }
     }
 

@@ -137,7 +137,8 @@ export function drawTile(
   type: string,
   x: number,
   y: number,
-  size: number
+  size: number,
+  now?: Date
 ) {
   ctx.save();
   ctx.translate(x, y);
@@ -309,20 +310,42 @@ export function drawTile(
     // 9 點標記
     ctx.fillRect(cx - r + 3, cy - 1.5, 3, 3);
 
-    // 時針 (指向約 10 點方向)
+    // 動態指針：根據現在時間計算角度
+    const current = now || new Date();
+    const hours = current.getHours();
+    const minutes = current.getMinutes();
+    const seconds = current.getSeconds();
+
+    const hourAngle = ((hours % 12) * 30 + minutes * 0.5 - 90) * Math.PI / 180;
+    const minuteAngle = (minutes * 6 + seconds * 0.1 - 90) * Math.PI / 180;
+    const secondAngle = (seconds * 6 - 90) * Math.PI / 180;
+
+    const hourLen = 6;
+    const minuteLen = 9;
+    const secondLen = 10;
+
+    // 時針
     ctx.strokeStyle = '#1c1917';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    ctx.lineTo(cx - 5, cy - 7);
+    ctx.lineTo(cx + Math.cos(hourAngle) * hourLen, cy + Math.sin(hourAngle) * hourLen);
     ctx.stroke();
 
-    // 分針 (指向約 2 點方向)
+    // 分針
     ctx.strokeStyle = '#44403c';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + 4, cy - 8);
+    ctx.lineTo(cx + Math.cos(minuteAngle) * minuteLen, cy + Math.sin(minuteAngle) * minuteLen);
+    ctx.stroke();
+
+    // 秒針
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(secondAngle) * secondLen, cy + Math.sin(secondAngle) * secondLen);
     ctx.stroke();
 
     // 中心軸點
