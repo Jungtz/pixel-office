@@ -25,8 +25,6 @@ export interface GameLoopConfig {
 
 export interface AppConfig {
   gameLoop?: GameLoopConfig;
-  initialTopic?: string;
-  defaultTopics?: string[];
   providers?: Record<string, Omit<ProviderDefinition, 'id'>>;
 }
 
@@ -64,13 +62,6 @@ export function getProviderList(): ProviderDefinition[] {
 
 export function getProviderById(id: string): ProviderDefinition | undefined {
   return getProviderList().find(p => p.id === id);
-}
-
-export function getInitialTopic(): string {
-  if (config && config.initialTopic) {
-    return config.initialTopic;
-  }
-  return 'Q3 核心新功能上線與系統架構優化';
 }
 
 export function getGameLoopConfig(): GameLoopConfig {

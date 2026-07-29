@@ -9,6 +9,25 @@ export interface LLMConfig {
   sdk?: string;
 }
 
+const MOCK_TOPIC_POOL = [
+  'Q3 核心新功能上線與系統架構優化',
+  '客戶緊急反饋之系統效能瓶頸處理',
+  '重構舊版程式碼與導入 Design System',
+  '準備週五 5 點產線正式 Build 發佈',
+  '第三方 API 金鑰突發失效之備援處置',
+  '全面導入 AI 智慧助理提升研發產能',
+  '跨部門溝通效率提升與需求優先級對齊',
+  '使用者體驗 (UX) 全面升級與跑版防護'
+];
+
+/**
+ * 隨機產生辦公室冒險主題
+ */
+export function generateMockTopic(): string {
+  const idx = Math.floor(Math.random() * MOCK_TOPIC_POOL.length);
+  return MOCK_TOPIC_POOL[idx] || MOCK_TOPIC_POOL[0];
+}
+
 // 預設 Mock 劇本對話庫 (針對辦公室日常情境與會議話題)
 const MOCK_DIALOGUE_SCRIPTS: Record<string, string[]> = {
   coffee: [
@@ -50,7 +69,7 @@ export function generateMockResponse(
       if (speaker.role === 'BOSS') return `「${topic}」是我們本季度的核心目標，大家全力衝刺！`;
     }
 
-    if (topic.includes('Bug') || topic.includes('崩潰') || topic.includes('問題')) {
+    if (topic.includes('Bug') || topic.includes('崩潰') || topic.includes('問題') || topic.includes('瓶頸')) {
       if (speaker.role === 'QA') return `我找到復現步驟了！連點三個按鈕就會觸發 NullPointer！`;
       if (speaker.role === 'RD') return `這不可能啊，在我的 Local 環境跑都很正常... 我看一下 Sentry Log。`;
       if (speaker.role === 'PM') return `這個 Bug 會影響發佈嗎？能不能先做個 Workaround？`;
@@ -60,7 +79,7 @@ export function generateMockResponse(
       if (speaker.role === 'BOSS') return `出現緊急 Bug 了！相關人員成立 War Room 限期解決！`;
     }
 
-    if (topic.includes('需求') || topic.includes('改動') || topic.includes('新功能')) {
+    if (topic.includes('需求') || topic.includes('改動') || topic.includes('新功能') || topic.includes('架構')) {
       if (speaker.role === 'PM') return `客戶剛剛緊急提出了這個新需求，我覺得很有價值，今天加進去！`;
       if (speaker.role === 'RD') return `又改需求？！這等於要重構底層 API，時程要多加三天！`;
       if (speaker.role === 'QA') return `需求改動的話，之前的 Test Cases 全部都要重新執行一遍...`;

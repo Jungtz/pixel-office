@@ -3,17 +3,15 @@ import { createDefaultMap, OFFICE_LOCATIONS, isTileWalkable, TILE_SIZE } from '.
 import { findPath } from './game/pathfinding';
 import { AgentCharacter, ChatMessage, Position, RoleType, MeetingState } from './game/types';
 import { fetchLLMResponse, LLMConfig } from './services/aiAgent';
-import { getProviderList, getProviderById, getGameLoopConfig, getInitialTopic } from './services/configService';
+import { getProviderList, getProviderById, getGameLoopConfig } from './services/configService';
 import { ROLE_CONFIGS } from './services/roles';
-
-
-
 import { soundManager } from './services/sound';
 
 import { OfficeCanvas } from './components/OfficeCanvas';
 import { ControlPanel } from './components/ControlPanel';
 import { DialogueBox } from './components/DialogueBox';
 import { SetupModal, RoleSetupConfig } from './components/SetupModal';
+import { TopicModal } from './components/TopicModal';
 import { ChatLog } from './components/ChatLog';
 
 export const App: React.FC = () => {
@@ -24,6 +22,8 @@ export const App: React.FC = () => {
   const [activeDialogue, setActiveDialogue] = useState<ChatMessage | null>(null);
 
   const [isSetupOpen, setIsSetupOpen] = useState(true);
+  const [isTopicOpen, setIsTopicOpen] = useState(false);
+  const [pendingConfig, setPendingConfig] = useState<RoleSetupConfig | null>(null);
   const [isChatLogOpen, setIsChatLogOpen] = useState(false);
   const [meetingState, setMeetingState] = useState<MeetingState>({
     isActive: false,
@@ -33,7 +33,7 @@ export const App: React.FC = () => {
     startTime: 0
   });
 
-  const [currentTopic, setCurrentTopic] = useState<string>(() => getInitialTopic());
+  const [currentTopic, setCurrentTopic] = useState<string>('Q3 核心新功能上線與系統架構優化');
 
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     provider: 'mock'
@@ -42,7 +42,7 @@ export const App: React.FC = () => {
   // 避免隨機自動對話過於頻繁的 timer ref
   const lastDialogueTime = useRef<number>(Date.now());
 
-  // 1. 初始化團隊角色
+  // 1. 第一階段：初始化團隊角色與 Provider，並開啟 TopicModal 選擇主題
   const handleStartSetup = (config: RoleSetupConfig) => {
     setLlmConfig({
       provider: config.provider,
@@ -52,14 +52,21 @@ export const App: React.FC = () => {
       sdk: config.sdk
     });
 
-    const initTopic = getInitialTopic();
-    setCurrentTopic(initTopic);
+    setPendingConfig(config);
+    setIsSetupOpen(false);
+    setIsTopicOpen(true);
+  };
+
+  // 2. 第二階段：確認 Topic 主題，生成 Agents 並啟動冒險
+  const handleConfirmTopic = (selectedTopic: string) => {
+    if (!pendingConfig) return;
+    setCurrentTopic(selectedTopic);
 
     const newAgents: AgentCharacter[] = [];
     let deskIdx = 0;
 
-    (Object.keys(config.counts) as RoleType[]).forEach(role => {
-      const count = config.counts[role];
+    (Object.keys(pendingConfig.counts) as RoleType[]).forEach(role => {
+      const count = pendingConfig.counts[role];
       for (let i = 0; i < count; i++) {
         const deskPos = OFFICE_LOCATIONS.desks[deskIdx % OFFICE_LOCATIONS.desks.length] || { x: 5, y: 5 };
         deskIdx++;
@@ -89,20 +96,20 @@ export const App: React.FC = () => {
     });
 
     setAgents(newAgents);
-    setIsSetupOpen(false);
+    setIsTopicOpen(false);
 
     // 遊戲啟動宣告開場主題 (由 Boss 或 PM 進行開場引言)
     setTimeout(() => {
       const leader = newAgents.find(a => a.role === 'BOSS') || newAgents.find(a => a.role === 'PM') || newAgents[0];
       if (leader) {
-        triggerAgentSpeech(leader, `團隊核心目標：${initTopic}`);
+        triggerAgentSpeech(leader, `團隊核心目標：${selectedTopic}`);
       }
     }, 600);
   };
 
-  // 2. 自動漫遊與對話循環 (Agent Autonomous Loop)
+  // 3. 自動漫遊與對話循環 (Agent Autonomous Loop)
   useEffect(() => {
-    if (isSetupOpen || agents.length === 0) return;
+    if (isSetupOpen || isTopicOpen || agents.length === 0) return;
 
     const loopConfig = getGameLoopConfig();
 
@@ -148,9 +155,7 @@ export const App: React.FC = () => {
     }, loopConfig.heartbeatIntervalMs);
 
     return () => clearInterval(interval);
-  }, [agents, isSetupOpen, meetingState, map, currentTopic]);
-
-
+  }, [agents, isSetupOpen, isTopicOpen, meetingState, map, currentTopic]);
 
   // 更新特定 Agent 的尋路路徑
   const updateAgentPath = (agentId: string, path: Position[], status: AgentCharacter['status']) => {
@@ -190,7 +195,7 @@ export const App: React.FC = () => {
     soundManager.playTextBleep(600);
   };
 
-  // 3. 召開全體會議 (Call Meeting)
+  // 4. 召開全體會議 (Call Meeting)
   const handleCallMeeting = async (topic: string) => {
     soundManager.playFanfareSound();
     setCurrentTopic(topic);
@@ -224,7 +229,7 @@ export const App: React.FC = () => {
     }, 1500);
   };
 
-  // 4. 派發需求/任務 (Dispatch Task)
+  // 5. 派發需求/任務 (Dispatch Task)
   const handleDispatchTask = async (task: string) => {
     soundManager.playFanfareSound();
     setCurrentTopic(task);
@@ -234,13 +239,11 @@ export const App: React.FC = () => {
     }
   };
 
-
-  // 5. 隨機爆發事件 (Random Incident)
+  // 6. 隨機爆發事件 (Random Incident)
   const handleTriggerRandomEvent = () => {
     const events = [
-      '客戶報告正式環境出現重大 Bug！點擊登入提示 500 錯誤！',
-      '辦公室咖啡機豆子用完了！大家陷入集體集體集體崩潰！',
-      '老闆說今天表現優秀，給團隊點了星巴克與豪華外送餐點！',
+      '客戶在體驗測試環境時，發現 Button 連點會畫面白屏！',
+      '金流 API 突然回傳 500 錯誤，訂單大量被掛起！',
       '發現某個第三方套件爆出零日漏洞，全體手動緊急 hotfix！'
     ];
     const eventTopic = events[Math.floor(Math.random() * events.length)];
@@ -261,7 +264,6 @@ export const App: React.FC = () => {
         agentCount={agents.length}
         chatMessagesCount={chatMessages.length}
       />
-
 
       {/* 2D Canvas 遊戲主畫面 */}
       <div className="flex-1 w-full h-full relative">
@@ -298,10 +300,17 @@ export const App: React.FC = () => {
         onClear={() => setChatMessages([])}
       />
 
-      {/* 初始化/組隊彈窗 */}
+      {/* 第一階段：初始化團隊/角色彈窗 */}
       <SetupModal
         isOpen={isSetupOpen}
         onStart={handleStartSetup}
+      />
+
+      {/* 第二階段：AI 生成與骰子 🎲 重新發想主題彈窗 */}
+      <TopicModal
+        isOpen={isTopicOpen}
+        llmConfig={llmConfig}
+        onConfirmTopic={handleConfirmTopic}
       />
 
     </div>

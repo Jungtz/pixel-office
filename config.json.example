@@ -11,13 +11,6 @@
       "chance": 0.4
     }
   },
-  "initialTopic": "Q3 核心新功能上線與系統架構優化",
-  "defaultTopics": [
-    "Q3 核心新功能上線與系統架構優化",
-    "客戶緊急反饋之系統效能瓶頸處理",
-    "重構舊版代碼與導入 Design System",
-    "準備週五的產線 Build 發佈"
-  ],
   "providers": {
     "ollama-cloud": {
       "type": "cloud",
