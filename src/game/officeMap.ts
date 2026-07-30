@@ -2,7 +2,7 @@ import { TileInfo, TileType, Position } from './types';
 
 export const MAP_WIDTH = 24;
 export const MAP_HEIGHT = 16;
-export const TILE_SIZE = 36; // 36px per tile
+export const TILE_SIZE = 36;
 
 // 關鍵地點座標定義
 export const OFFICE_LOCATIONS = {

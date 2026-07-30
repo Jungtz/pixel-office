@@ -3,7 +3,6 @@ import { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } from './officeMap';
 import { drawCharacterSprite, drawTile, drawEmojiBubble, drawNeedsBar } from './sprites';
 import { getCriticalNeedsEmoji } from './behaviorEngine';
 
-/** 縮放限制常數 */
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3.0;
 const ZOOM_STEP = 0.1;
@@ -20,7 +19,6 @@ export class GameEngine {
   private onAgentClickCb?: (agent: AgentCharacter) => void;
   private eavesdropTimers: Map<string, number> = new Map();
 
-  // 縮放與平移狀態
   private zoom: number = 1.0;
   private panX: number = 0;
   private panY: number = 0;
@@ -31,7 +29,6 @@ export class GameEngine {
   private dragStartPanX: number = 0;
   private dragStartPanY: number = 0;
 
-  // 事件處理函式引用（供 cleanup 用）
   private boundHandleWheel: (e: WheelEvent) => void;
   private boundHandleMouseDown: (e: MouseEvent) => void;
   private boundHandleMouseMove: (e: MouseEvent) => void;
@@ -42,7 +39,6 @@ export class GameEngine {
     this.ctx = canvas.getContext('2d')!;
     this.map = map;
 
-    // 綁定事件處理（保留引用以便 cleanup）
     this.boundHandleWheel = this.handleWheel.bind(this);
     this.boundHandleMouseDown = this.handlePanStart.bind(this);
     this.boundHandleMouseMove = this.handlePanMove.bind(this);
@@ -99,16 +95,12 @@ export class GameEngine {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
     }
-    // 移除事件監聽
     this.canvas.removeEventListener('wheel', this.boundHandleWheel);
     this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
     window.removeEventListener('mousemove', this.boundHandleMouseMove);
     window.removeEventListener('mouseup', this.boundHandleMouseUp);
   }
 
-  // ── 縮放與平移 ──────────────────────────────
-
-  /** 滑鼠滾輪縮放（以游標位置為中心） */
   private handleWheel(e: WheelEvent) {
     e.preventDefault();
 
@@ -120,28 +112,22 @@ export class GameEngine {
     const totalMapHeight = MAP_HEIGHT * TILE_SIZE;
 
     const oldZoom = this.zoom;
-    // 舊的置中偏移量
     const oldBaseX = Math.max(0, (this.canvas.width - totalMapWidth * oldZoom) / 2);
     const oldBaseY = Math.max(0, (this.canvas.height - totalMapHeight * oldZoom) / 2);
 
-    // 游標對應的地圖座標（不變量）
     const mapX = (mouseX - oldBaseX - this.panX) / oldZoom;
     const mapY = (mouseY - oldBaseY - this.panY) / oldZoom;
 
-    // 更新 zoom
     const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
     this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + delta));
 
-    // 新的置中偏移量
     const newBaseX = Math.max(0, (this.canvas.width - totalMapWidth * this.zoom) / 2);
     const newBaseY = Math.max(0, (this.canvas.height - totalMapHeight * this.zoom) / 2);
 
-    // 反推 pan 使同一地圖點仍在游標下方
     this.panX = mouseX - newBaseX - this.zoom * mapX;
     this.panY = mouseY - newBaseY - this.zoom * mapY;
   }
 
-  /** 拖曳起始（左鍵或中鍵） */
   private handlePanStart(e: MouseEvent) {
     if (e.button === 0 || e.button === 1) {
       e.preventDefault();
@@ -154,12 +140,10 @@ export class GameEngine {
     }
   }
 
-  /** 拖曳平移移動（超過死區門檻才算拖曳） */
   private handlePanMove(e: MouseEvent) {
     if (!this.isDragging) return;
     const dx = e.clientX - this.dragStartX;
     const dy = e.clientY - this.dragStartY;
-    // 5px 死區：避免手抖誤觸拖曳
     if (!this.didDrag && Math.hypot(dx, dy) < 5) return;
     this.didDrag = true;
     this.canvas.style.cursor = 'grabbing';
@@ -167,10 +151,8 @@ export class GameEngine {
     this.panY = this.dragStartPanY + dy;
   }
 
-  /** 拖曳結束：未超過死區視為點擊選角色 */
   private handlePanEnd(e: MouseEvent) {
     if (this.isDragging && !this.didDrag) {
-      // 沒有真正拖曳 → 視為點擊
       this.handleClick(e.clientX, e.clientY);
     }
     this.isDragging = false;
@@ -178,14 +160,10 @@ export class GameEngine {
     this.canvas.style.cursor = 'grab';
   }
 
-  /**
-   * 遊戲狀態更新 (位置插值與尋路移動)
-   */
   private update(dt: number) {
-    const speed = 4; // Grid speed (tiles per second)
+    const speed = 4;
 
     this.agents.forEach(agent => {
-      // 倒數頭頂發言泡泡顯示時間
       if (agent.speechTimer > 0) {
         agent.speechTimer -= dt;
         if (agent.speechTimer <= 0) {
@@ -193,7 +171,6 @@ export class GameEngine {
         }
       }
 
-      // 倒數 Emoji 泡泡顯示時間
       if (agent.emojiTimer > 0) {
         agent.emojiTimer -= dt;
         if (agent.emojiTimer <= 0) {
@@ -201,7 +178,6 @@ export class GameEngine {
         }
       }
 
-      // 倒數迷你對話泡泡顯示時間
       if (agent.miniBubbleTimer > 0) {
         agent.miniBubbleTimer -= dt;
         if (agent.miniBubbleTimer <= 0) {
@@ -209,7 +185,6 @@ export class GameEngine {
         }
       }
 
-      // 如果有路徑，持續移動
       if (agent.path.length > 0) {
         const eavesdropUntil = this.eavesdropTimers.get(agent.id);
         if (eavesdropUntil && Date.now() < eavesdropUntil) {
@@ -218,42 +193,37 @@ export class GameEngine {
           this.eavesdropTimers.delete(agent.id);
 
           agent.status = 'walking';
-        const nextGridPos = agent.path[0];
-        const targetPixelX = nextGridPos.x * TILE_SIZE;
-        const targetPixelY = nextGridPos.y * TILE_SIZE;
+          const nextGridPos = agent.path[0];
+          const targetPixelX = nextGridPos.x * TILE_SIZE;
+          const targetPixelY = nextGridPos.y * TILE_SIZE;
 
-        const dx = targetPixelX - agent.pixelPos.x;
-        const dy = targetPixelY - agent.pixelPos.y;
-        const dist = Math.hypot(dx, dy);
+          const dx = targetPixelX - agent.pixelPos.x;
+          const dy = targetPixelY - agent.pixelPos.y;
+          const dist = Math.hypot(dx, dy);
 
-        // 更新朝向
-        if (Math.abs(dx) > Math.abs(dy)) {
-          agent.direction = dx > 0 ? 'right' : 'left';
-        } else if (Math.abs(dy) > 0) {
-          agent.direction = dy > 0 ? 'down' : 'up';
-        }
-
-        const step = speed * TILE_SIZE * dt;
-        if (dist <= step) {
-          // 到達當前網格點
-          agent.pixelPos.x = targetPixelX;
-          agent.pixelPos.y = targetPixelY;
-          agent.gridPos = { ...nextGridPos };
-          agent.path.shift(); // 移動至下一個節點
-
-          if (agent.path.length === 0) {
-            agent.targetPos = null;
+          if (Math.abs(dx) > Math.abs(dy)) {
+            agent.direction = dx > 0 ? 'right' : 'left';
+          } else if (Math.abs(dy) > 0) {
+            agent.direction = dy > 0 ? 'down' : 'up';
           }
-        } else {
-          // 步進移動
-          agent.pixelPos.x += (dx / dist) * step;
-          agent.pixelPos.y += (dy / dist) * step;
-          // 行走動畫幀交替
-          agent.animFrame = Math.floor((performance.now() / 150) % 2);
-        }
+
+          const step = speed * TILE_SIZE * dt;
+          if (dist <= step) {
+            agent.pixelPos.x = targetPixelX;
+            agent.pixelPos.y = targetPixelY;
+            agent.gridPos = { ...nextGridPos };
+            agent.path.shift();
+
+            if (agent.path.length === 0) {
+              agent.targetPos = null;
+            }
+          } else {
+            agent.pixelPos.x += (dx / dist) * step;
+            agent.pixelPos.y += (dy / dist) * step;
+            agent.animFrame = Math.floor((performance.now() / 150) % 2);
+          }
         }
       } else {
-        // 根據狀態決定動畫幀
         if (agent.status === 'working') {
           agent.animFrame = Math.floor((performance.now() / 400) % 2);
         } else if (agent.status === 'resting') {
@@ -276,7 +246,6 @@ export class GameEngine {
       }
     });
 
-    // 互動偵測：相鄰角色自動面對面
     this.detectInteractions();
   }
 
@@ -317,14 +286,10 @@ export class GameEngine {
     }
   }
 
-  /**
-   * 繪製遊戲畫面
-   */
   private render() {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // 計算 Center offset（基於原始尺寸）
     const totalMapWidth = MAP_WIDTH * TILE_SIZE;
     const totalMapHeight = MAP_HEIGHT * TILE_SIZE;
     const baseOffsetX = Math.max(0, (this.canvas.width - totalMapWidth * this.zoom) / 2);
@@ -334,7 +299,6 @@ export class GameEngine {
     ctx.translate(baseOffsetX + this.panX, baseOffsetY + this.panY);
     ctx.scale(this.zoom, this.zoom);
 
-    // 1. 繪製辦公室 Tilemap
     const now = new Date();
     for (let y = 0; y < MAP_HEIGHT; y++) {
       for (let x = 0; x < MAP_WIDTH; x++) {
@@ -343,11 +307,10 @@ export class GameEngine {
       }
     }
 
-    // 2. 繪製選擇高亮標記 (Selected Agent Indicator)
     if (this.selectedAgentId) {
       const selected = this.agents.find(a => a.id === this.selectedAgentId);
       if (selected) {
-        ctx.strokeStyle = '#eab308'; // 金黃色選取圈
+        ctx.strokeStyle = '#eab308';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(
@@ -359,7 +322,6 @@ export class GameEngine {
         );
         ctx.stroke();
 
-        // 頭頂黃色光標指示
         ctx.fillStyle = '#eab308';
         ctx.beginPath();
         ctx.moveTo(selected.pixelPos.x + TILE_SIZE / 2, selected.pixelPos.y - 12);
@@ -370,7 +332,6 @@ export class GameEngine {
       }
     }
 
-    // 3. 繪製角色 (按 Y 軸排序呈現前後遮擋景深)
     const sortedAgents = [...this.agents].sort((a, b) => a.pixelPos.y - b.pixelPos.y);
 
     sortedAgents.forEach(agent => {
@@ -385,14 +346,12 @@ export class GameEngine {
         agent.status
       );
 
-      // Emoji 泡泡（狀態表情，在名字上方）
       const criticalEmoji = getCriticalNeedsEmoji(agent.needs);
       const displayEmoji = agent.emojiBubble || criticalEmoji;
       if (displayEmoji && !agent.speechBubble) {
         drawEmojiBubble(ctx, displayEmoji, agent.pixelPos.x, agent.pixelPos.y, TILE_SIZE);
       }
 
-      // 迷你對話泡泡（人物自發短語，在 Emoji 泡泡上方）
       if (agent.miniBubble && !agent.speechBubble) {
         ctx.save();
         ctx.font = '9px "Noto Sans TC", sans-serif';
@@ -415,7 +374,6 @@ export class GameEngine {
         ctx.restore();
       }
 
-      // 角色名稱與職稱標籤
       ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
       ctx.fillRect(agent.pixelPos.x - 10, agent.pixelPos.y + TILE_SIZE + 2, TILE_SIZE + 20, 14);
       ctx.font = '10px "Noto Sans TC", sans-serif';
@@ -427,7 +385,6 @@ export class GameEngine {
         agent.pixelPos.y + TILE_SIZE + 13
       );
 
-      // 情緒小圖標（名字右側）
       if (agent.mood && agent.mood !== 'neutral') {
         const moodEmojis: Record<string, string> = {
           happy: '😊', stressed: '😫', bored: '😑', excited: '🤩',
@@ -438,15 +395,10 @@ export class GameEngine {
           ctx.font = '9px sans-serif';
           ctx.fillStyle = '#f8fafc';
           ctx.textAlign = 'center';
-          ctx.fillText(
-            moodEmoji,
-            agent.pixelPos.x + TILE_SIZE / 2 + 16,
-            agent.pixelPos.y + TILE_SIZE + 13
-          );
+          ctx.fillText(moodEmoji, agent.pixelPos.x + TILE_SIZE / 2 + 16, agent.pixelPos.y + TILE_SIZE + 13);
         }
       }
 
-      // 需求進度條（選中角色或需求危急時顯示）
       const showNeedsBar = agent.id === this.selectedAgentId ||
         agent.needs.energy < 20 || agent.needs.caffeine < 20 || agent.needs.social < 20;
 
@@ -454,7 +406,6 @@ export class GameEngine {
         drawNeedsBar(ctx, agent.needs, agent.pixelPos.x, agent.pixelPos.y, TILE_SIZE);
       }
 
-      // 頭頂 Speech Bubble
       if (agent.speechBubble) {
         this.drawSpeechBubble(
           ctx,
@@ -468,9 +419,6 @@ export class GameEngine {
     ctx.restore();
   }
 
-  /**
-   * 繪製像素氣泡 (Speech Bubble)
-   */
   private drawSpeechBubble(
     ctx: CanvasRenderingContext2D,
     text: string,
@@ -489,14 +437,12 @@ export class GameEngine {
     const bx = Math.round(x - bubbleWidth / 2);
     const by = Math.round(y - bubbleHeight);
 
-    // 深藍底藍框（DQ 質感氣泡）
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(bx, by, bubbleWidth, bubbleHeight);
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(bx, by, bubbleWidth, bubbleHeight);
 
-    // 小箭頭
     ctx.fillStyle = '#0f172a';
     ctx.beginPath();
     ctx.moveTo(x - 4, by + bubbleHeight);
@@ -505,7 +451,6 @@ export class GameEngine {
     ctx.closePath();
     ctx.fill();
 
-    // 文字
     ctx.fillStyle = '#f8fafc';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -514,16 +459,11 @@ export class GameEngine {
     ctx.restore();
   }
 
-
-  /**
-   * 處理 Canvas 點擊 Event (選取角色)
-   */
   public handleClick(clientX: number, clientY: number) {
     const rect = this.canvas.getBoundingClientRect();
     const clickX = clientX - rect.left;
     const clickY = clientY - rect.top;
 
-    // 反轉 zoom + pan + baseOffset，將螢幕座標映射回地圖座標
     const totalMapWidth = MAP_WIDTH * TILE_SIZE;
     const totalMapHeight = MAP_HEIGHT * TILE_SIZE;
     const baseOffsetX = Math.max(0, (this.canvas.width - totalMapWidth * this.zoom) / 2);
@@ -532,7 +472,6 @@ export class GameEngine {
     const mapX = (clickX - baseOffsetX - this.panX) / this.zoom;
     const mapY = (clickY - baseOffsetY - this.panY) / this.zoom;
 
-    // 檢查點擊是否在角色身上
     for (const agent of this.agents) {
       if (
         mapX >= agent.pixelPos.x &&
