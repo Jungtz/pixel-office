@@ -264,10 +264,14 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       console.log(`[SceneCtx] : ${sceneData ? `已載入 (${sceneData.totalPeople}人, ${sceneData.time})` : '無場景資訊'}`);
       messagesPayload = [
         { role: 'system', content: systemPrompt },
-        ...(contextMessages || []).slice(-8).map((m: any) => ({
-          role: m.speakerRole === speakerRole ? 'assistant' : 'user',
-          content: `[${m.speakerName}] ${m.text}`
-        }))
+        ...(contextMessages || []).slice(-8).map((m: any) => {
+          // 清理 text 中殘留的 [SpeakerName] 前綴，避免逐輪累積
+          const cleanText = m.text.replace(/^(\[\w+\]\s*)+/g, '').trim();
+          return {
+            role: m.speakerRole === speakerRole ? 'assistant' : 'user',
+            content: `[${m.speakerName}] ${cleanText}`
+          };
+        })
       ];
 
     }
@@ -342,7 +346,8 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     const text = data.message?.content || data.choices?.[0]?.message?.content;
     if (text && typeof text === 'string') {
       const cleanResult = text
-        .replace(/^[\w_]+(\s*\([^)]*\))?\s*:\s*/g, '')
+        .replace(/^(\[\w+\]\s*)+/g, '')          // 剝掉 [AD_1] [AD_1] 類前綴
+        .replace(/^[\w_]+(\s*\([^)]*\))?\s*:\s*/g, '') // 剝掉 AD_1 (AD): 類前綴
         .replace(/["「」]/g, '')
         .trim();
       if (isTopicGen) {
