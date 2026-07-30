@@ -1,5 +1,7 @@
-import { AgentCharacter, AgentNeeds, AgentStatus, Position, RoleType } from './types';
+import { AgentCharacter, AgentNeeds, AgentStatus, Position, RoleType, MoodState } from './types';
 import { OFFICE_LOCATIONS } from './officeMap';
+import { evaluateMoodFromStatus, triggerMood, tickMood } from './mood';
+import { getMiniBubble } from './miniBubbles';
 
 const BASE_ENERGY_DECAY = 1.5;
 const BASE_CAFFEINE_DECAY = 1.0;
@@ -27,6 +29,11 @@ const IDLE_DURATION_MS = 3000;
 const PATROL_DURATION_MS = 4000;
 const THINKING_DURATION_MS = 6000;
 
+const BOSS_AURA_RANGE = 4;
+const PM_AURA_RANGE = 3;
+const GREETING_RANGE = 1;
+const GREETING_CHANCE = 0.22;
+const MINI_BUBBLE_CHANCE = 0.08;
 function hashAgentId(id: string, seed: number): number {
   let hash = seed;
   for (let i = 0; i < id.length; i++) {
@@ -36,16 +43,8 @@ function hashAgentId(id: string, seed: number): number {
   return Math.abs(hash);
 }
 
-function agentDecayFactor(id: string): number {
-  return 0.82 + (hashAgentId(id, 7) % 37) / 100;
-}
-
 function agentThreshold(id: string): number {
   return NEED_THRESHOLD_BASE - 7 + (hashAgentId(id, 13) % 15);
-}
-
-function agentHesitation(id: string): number {
-  return (hashAgentId(id, 3) % 100) / 100;
 }
 
 export interface BehaviorDecision {
@@ -62,10 +61,21 @@ function clampNeed(value: number): number {
 }
 
 function decayNeeds(agent: AgentCharacter, deltaSeconds: number): void {
-  const factor = agentDecayFactor(agent.id);
-  agent.needs.energy = clampNeed(agent.needs.energy - BASE_ENERGY_DECAY * factor * deltaSeconds);
-  agent.needs.caffeine = clampNeed(agent.needs.caffeine - BASE_CAFFEINE_DECAY * factor * deltaSeconds);
-  agent.needs.social = clampNeed(agent.needs.social - BASE_SOCIAL_DECAY * factor * deltaSeconds);
+  const baseFactor = 1.0;
+  const diligenceMod = 0.7 + agent.personality.diligence * 0.6;
+  const caffeineMod = 0.5 + agent.personality.caffeineAddiction * 1.0;
+  const socialMod = 2.0 - agent.personality.sociability * 1.2;
+
+  agent.needs.energy = clampNeed(agent.needs.energy - BASE_ENERGY_DECAY * baseFactor * diligenceMod * deltaSeconds);
+  agent.needs.caffeine = clampNeed(agent.needs.caffeine - BASE_CAFFEINE_DECAY * baseFactor * caffeineMod * deltaSeconds);
+  agent.needs.social = clampNeed(agent.needs.social - BASE_SOCIAL_DECAY * baseFactor * socialMod * deltaSeconds);
+
+  if (agent.mood === 'focused') {
+    agent.needs.energy = clampNeed(agent.needs.energy - BASE_ENERGY_DECAY * 0.3 * deltaSeconds);
+  }
+  if (agent.mood === 'lazy') {
+    agent.needs.energy = clampNeed(agent.needs.energy - BASE_ENERGY_DECAY * 0.2 * deltaSeconds);
+  }
 
   agent.stats.stress = clampNeed(100 - (agent.needs.energy + agent.needs.social) / 2);
   agent.stats.coffeeLevel = agent.needs.caffeine;
@@ -135,6 +145,116 @@ function isNearWaterCooler(pos: Position): boolean {
 
 function isAtDesk(agent: AgentCharacter): boolean {
   return agent.gridPos.x === agent.deskPos.x && agent.gridPos.y === agent.deskPos.y;
+}
+
+function isSlacking(agent: AgentCharacter): boolean {
+  const slackingStatuses: AgentStatus[] = ['phone', 'daydream', 'stretch', 'resting'];
+  return slackingStatuses.includes(agent.status) || (agent.status === 'idle' && !isAtDesk(agent));
+}
+
+interface ProximityReaction {
+  agentId: string;
+  forceStatus?: AgentStatus;
+  forceForceMove?: { target: 'desk' | 'sofa' | 'center'; status: AgentStatus };
+  emoji?: string;
+  mood?: MoodState;
+  miniBubble?: string;
+}
+
+function checkProximityReactions(agent: AgentCharacter, allAgents: AgentCharacter[]): ProximityReaction[] {
+  const reactions: ProximityReaction[] = [];
+
+  const boss = allAgents.find(a => a.role === 'BOSS' && a.id !== agent.id);
+  if (boss) {
+    const dist = Math.abs(agent.gridPos.x - boss.gridPos.x) + Math.abs(agent.gridPos.y - boss.gridPos.y);
+    if (dist <= BOSS_AURA_RANGE && boss.path.length === 0) {
+      if (agent.role !== 'BOSS') {
+        if (agent.personality.stressTolerance < 0.3 && Math.random() < 0.6) {
+          reactions.push({
+            agentId: agent.id,
+            emoji: '😰',
+            mood: 'nervous',
+            miniBubble: getMiniBubble(agent.role, 'boss_sighting')
+          });
+        }
+        if (isSlacking(agent) && agent.personality.diligence > 0.3 && Math.random() < 0.55) {
+          reactions.push({
+            agentId: agent.id,
+            forceForceMove: { target: 'desk', status: 'working' },
+            emoji: '😅',
+            mood: 'nervous',
+            miniBubble: getMiniBubble(agent.role, 'boss_sighting')
+          });
+        }
+      }
+    }
+  }
+
+  const pm = allAgents.find(a => a.role === 'PM' && a.id !== agent.id);
+  if (pm && agent.role !== 'BOSS' && agent.role !== 'PM') {
+    const dist = Math.abs(agent.gridPos.x - pm.gridPos.x) + Math.abs(agent.gridPos.y - pm.gridPos.y);
+    if (dist <= PM_AURA_RANGE && pm.path.length === 0 && pm.status === 'patrolling') {
+      if (isSlacking(agent) && agent.personality.diligence > 0.2 && Math.random() < 0.5) {
+        reactions.push({
+          agentId: agent.id,
+          forceForceMove: { target: 'desk', status: 'working' },
+          emoji: '😬',
+          mood: 'nervous'
+        });
+      }
+    }
+  }
+
+  return reactions;
+}
+
+function maybeTriggerMiniBubble(agent: AgentCharacter): string | null {
+  if (agent.miniBubble) return null;
+
+  const now = Date.now();
+  if (now - agent.lastMiniBubbleTime < 12000) return null;
+
+  const personalityBonus = agent.personality.expressiveness * 0.12;
+  const moodBonus = agent.mood === 'happy' ? 0.05 : (agent.mood === 'excited' ? 0.08 : 0);
+  const totalChance = MINI_BUBBLE_CHANCE + personalityBonus + moodBonus;
+
+  if (Math.random() < totalChance) {
+    const ctxMap: Record<string, string> = {
+      coffee: 'coffee_run',
+      resting: 'tired',
+      phone: 'bored_at_desk',
+      daydream: 'bored_at_desk',
+      stretch: 'tired',
+      working: agent.mood === 'focused' ? 'working_hard' : 'random',
+      talking: 'chatting',
+      patrolling: 'random',
+    };
+    const ctx = ctxMap[agent.status] || 'random';
+    return getMiniBubble(agent.role, ctx as any);
+  }
+
+  return null;
+}
+
+function maybeGreetNearby(agent: AgentCharacter, allAgents: AgentCharacter[]): string | null {
+  if (!isAtDesk(agent) && agent.path.length === 0 && agent.status !== 'talking') {
+    for (const other of allAgents) {
+      if (other.id === agent.id) continue;
+      if (other.path.length > 0) continue;
+      const dist = Math.abs(agent.gridPos.x - other.gridPos.x) + Math.abs(agent.gridPos.y - other.gridPos.y);
+
+      if (dist === GREETING_RANGE) {
+        const greetChance = GREETING_CHANCE * agent.personality.sociability * (1 + agent.personality.expressiveness);
+        if (Math.random() < greetChance) {
+          agent.direction = agent.gridPos.x < other.gridPos.x ? 'right' :
+            agent.gridPos.x > other.gridPos.x ? 'left' :
+            agent.gridPos.y < other.gridPos.y ? 'down' : 'up';
+          return getMiniBubble(agent.role, 'greeting');
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function findNearbyColleague(agent: AgentCharacter, allAgents: AgentCharacter[]): AgentCharacter | null {
@@ -258,7 +378,13 @@ function getIdleActionPool(role: RoleType): IdleAction[] {
 function maybeTriggerIdleBehavior(agent: AgentCharacter): BehaviorDecision | null {
   const now = Date.now();
   if (now - agent.lastIdleActionTime < IDLE_ACTION_COOLDOWN_MS) return null;
-  if (Math.random() > IDLE_ACTION_CHANCE) return null;
+
+  const diligenceMod = 1.8 - agent.personality.diligence * 1.2;
+  const curiosityBonus = agent.personality.curiosity * 0.12;
+  const moodBonus = agent.mood === 'bored' ? 0.12 : (agent.mood === 'lazy' ? 0.10 : 0);
+  const adjustedChance = Math.min(0.65, IDLE_ACTION_CHANCE * diligenceMod + curiosityBonus + moodBonus);
+
+  if (Math.random() > adjustedChance) return null;
 
   const pool = getIdleActionPool(agent.role);
   const totalWeight = pool.reduce((sum, a) => sum + a.weight, 0);
@@ -286,7 +412,12 @@ function maybeTriggerIdleBehavior(agent: AgentCharacter): BehaviorDecision | nul
 function maybeTriggerRoleBehavior(agent: AgentCharacter, allAgents: AgentCharacter[]): BehaviorDecision | null {
   const now = Date.now();
   if (now - agent.lastRoleActionTime < ROLE_ACTION_COOLDOWN_MS) return null;
-  if (Math.random() > ROLE_ACTION_CHANCE) return null;
+
+  const curiosityMod = 0.5 + agent.personality.curiosity * 1.2;
+  const diligenceMod = 0.6 + agent.personality.diligence * 0.8;
+  const adjustedChance = Math.min(0.35, ROLE_ACTION_CHANCE * curiosityMod * diligenceMod);
+
+  if (Math.random() > adjustedChance) return null;
 
   switch (agent.role) {
     case 'BOSS': {
@@ -476,7 +607,11 @@ function maybeJoinGathering(agent: AgentCharacter, allAgents: AgentCharacter[]):
     const distToGroup = Math.abs(agent.gridPos.x - center.gridPos.x) + Math.abs(agent.gridPos.y - center.gridPos.y);
 
     if (distToGroup > 3) continue;
-    if (Math.random() > GROUP_GATHER_CHANCE) continue;
+
+    const socialMod = 0.3 + agent.personality.sociability * 1.2;
+    const adjustedChance = Math.min(0.75, GROUP_GATHER_CHANCE * socialMod);
+
+    if (Math.random() > adjustedChance) continue;
 
     const adjacentPos = getAdjacentPosition(agent.gridPos, center.gridPos);
     if (isHeadingToPos(adjacentPos, allAgents, agent.id)) continue;
@@ -508,7 +643,8 @@ function decideNextAction(agent: AgentCharacter, allAgents: AgentCharacter[]): B
     .filter(n => n.value < threshold)
     .sort((a, b) => a.value - b.value);
 
-  if (urgentNeeds.length > 0 && Math.random() < agentHesitation(agent.id)) {
+  const personalityHesitation = 1 - agent.personality.diligence;
+  if (urgentNeeds.length > 0 && Math.random() < personalityHesitation * 0.7) {
     return { action: 'stay', status: agent.status === 'idle' ? 'working' : agent.status };
   }
 
@@ -618,11 +754,69 @@ function decideNextAction(agent: AgentCharacter, allAgents: AgentCharacter[]): B
 export function tickBehavior(
   agent: AgentCharacter,
   allAgents: AgentCharacter[],
-  deltaSeconds: number
+  deltaSeconds: number,
+  timeOfDay?: number
 ): BehaviorDecision | null {
   if (agent.path.length > 0) return null;
 
   decayNeeds(agent, deltaSeconds);
+  tickMood(agent, deltaSeconds);
+  evaluateMoodFromStatus(agent);
+
+  const proxReactions = checkProximityReactions(agent, allAgents);
+  for (const reaction of proxReactions) {
+    if (reaction.emoji) {
+      agent.emojiBubble = reaction.emoji;
+      agent.emojiTimer = 3;
+    }
+    if (reaction.mood) {
+      triggerMood(agent, reaction.mood, 5);
+    }
+    if (reaction.miniBubble && !agent.miniBubble) {
+      agent.miniBubble = reaction.miniBubble;
+      agent.miniBubbleTimer = 3;
+      agent.lastMiniBubbleTime = Date.now();
+    }
+    if (reaction.forceForceMove) {
+      agent.eventMoveTarget = reaction.forceForceMove.target;
+      agent.eventMoveStatus = reaction.forceForceMove.status;
+    }
+  }
+
+  if (!agent.miniBubble && agent.miniBubbleTimer <= 0) {
+    const greetBubble = maybeGreetNearby(agent, allAgents);
+    if (greetBubble) {
+      agent.miniBubble = greetBubble;
+      agent.miniBubbleTimer = 3;
+      agent.lastMiniBubbleTime = Date.now();
+    } else {
+      const bubble = maybeTriggerMiniBubble(agent);
+      if (bubble) {
+        agent.miniBubble = bubble;
+        agent.miniBubbleTimer = 3;
+        agent.lastMiniBubbleTime = Date.now();
+      }
+    }
+  }
+
+  if (timeOfDay !== undefined) {
+    const afternoonSlump = timeOfDay >= 13 && timeOfDay <= 15;
+    const morningRush = timeOfDay >= 9 && timeOfDay <= 10.5;
+    const eveningCrunch = timeOfDay >= 17;
+
+    if (afternoonSlump && agent.personality.diligence < 0.5) {
+      agent.needs.energy = clampNeed(agent.needs.energy - 0.6 * deltaSeconds);
+      if (Math.random() < 0.1 * deltaSeconds) {
+        triggerMood(agent, 'bored', 8);
+      }
+    }
+    if (morningRush && agent.personality.diligence > 0.6) {
+      triggerMood(agent, 'focused', 4);
+    }
+    if (eveningCrunch && agent.personality.stressTolerance < 0.4) {
+      agent.stats.stress = clampNeed(agent.stats.stress + 0.8 * deltaSeconds);
+    }
+  }
 
   if (agent.eventMoveTarget) {
     const eventDecision = resolveEventMove(agent);

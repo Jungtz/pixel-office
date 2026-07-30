@@ -7,7 +7,8 @@ import { getProviderList, getProviderById, getGameLoopConfig } from './services/
 import { ROLE_CONFIGS } from './services/roles';
 import { soundManager } from './services/sound';
 import { tickBehavior } from './game/behaviorEngine';
-import { triggerRandomEvent } from './game/events';
+import { triggerRandomEvent, clearPendingChain } from './game/events';
+import { generatePersonality } from './game/personality';
 
 import { OfficeCanvas } from './components/OfficeCanvas';
 import { ControlPanel } from './components/ControlPanel';
@@ -45,6 +46,8 @@ export const App: React.FC = () => {
   const [aiTakeover, setAiTakeover] = useState<boolean>(false);
   const aiTakeoverRef = useRef<boolean>(false);
   const [roundsExhausted, setRoundsExhausted] = useState<boolean>(false);
+
+  const inGameTimeRef = useRef<number>(9);
 
   useEffect(() => {
     aiTakeoverRef.current = aiTakeover;
@@ -106,6 +109,7 @@ export const App: React.FC = () => {
         const agentName = isUserAgent
           ? (pendingConfig.userName || `${role}_${i + 1}`)
           : `${role}_${i + 1}`;
+        const personality = generatePersonality(role, newAgents.length);
         newAgents.push({
           id: `${role}_${i}_${Date.now()}`,
           name: agentName,
@@ -131,6 +135,12 @@ export const App: React.FC = () => {
             caffeine: Math.floor(Math.random() * 50 + 35),
             social: Math.floor(Math.random() * 50 + 25)
           },
+          personality,
+          mood: 'neutral',
+          moodTimer: 0,
+          miniBubble: null,
+          miniBubbleTimer: 0,
+          lastMiniBubbleTime: 0,
           activityStartTime: 0,
           activityDuration: 0,
           emojiBubble: null,
@@ -139,7 +149,9 @@ export const App: React.FC = () => {
           lastRoleActionTime: initTime,
           lastIdleActionTime: initTime,
           eventMoveTarget: null,
-          eventMoveStatus: null
+          eventMoveStatus: null,
+          eventChainId: null,
+          eventChainStep: 0
         });
       }
     });
@@ -150,6 +162,8 @@ export const App: React.FC = () => {
     setRoundsExhausted(false);
     lastBehaviorTick.current = Date.now();
     lastEventTime.current = Date.now();
+    inGameTimeRef.current = 9;
+    clearPendingChain();
 
     // 遊戲啟動宣告開場主題 (由 Boss 或 PM 進行開場引言)
     setTimeout(() => {
@@ -175,6 +189,11 @@ export const App: React.FC = () => {
       const deltaSeconds = Math.min((now - lastBehaviorTick.current) / 1000, 10);
       lastBehaviorTick.current = now;
 
+      // 時間模擬：以遊戲心跳推進（每秒約加速 90 秒，即 90x 速度）
+      inGameTimeRef.current += (deltaSeconds * 90) / 3600;
+      if (inGameTimeRef.current >= 24) inGameTimeRef.current -= 24;
+      const timeOfDay = inGameTimeRef.current;
+
       // 建立 agents 的可變動副本（深拷貝 needs 與 stats 避免直接 mutation）
       const updatedAgents = agents.map(a => ({
         ...a,
@@ -188,7 +207,7 @@ export const App: React.FC = () => {
       for (const agent of updatedAgents) {
         if (agent.path.length > 0) continue;
 
-        const decision = tickBehavior(agent, updatedAgents, deltaSeconds);
+        const decision = tickBehavior(agent, updatedAgents, deltaSeconds, timeOfDay);
         if (!decision) continue;
 
         if (decision.action === 'move' && decision.targetPos) {
