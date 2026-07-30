@@ -3,6 +3,11 @@ import { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } from './officeMap';
 import { drawCharacterSprite, drawTile, drawEmojiBubble, drawNeedsBar } from './sprites';
 import { getCriticalNeedsEmoji } from './behaviorEngine';
 
+/** 縮放限制常數 */
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3.0;
+const ZOOM_STEP = 0.1;
+
 export class GameEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -15,13 +20,40 @@ export class GameEngine {
   private onAgentClickCb?: (agent: AgentCharacter) => void;
   private eavesdropTimers: Map<string, number> = new Map();
 
+  // 縮放與平移狀態
+  private zoom: number = 1.0;
+  private panX: number = 0;
+  private panY: number = 0;
+  private isDragging: boolean = false;
+  private didDrag: boolean = false;
+  private dragStartX: number = 0;
+  private dragStartY: number = 0;
+  private dragStartPanX: number = 0;
+  private dragStartPanY: number = 0;
+
+  // 事件處理函式引用（供 cleanup 用）
+  private boundHandleWheel: (e: WheelEvent) => void;
+  private boundHandleMouseDown: (e: MouseEvent) => void;
+  private boundHandleMouseMove: (e: MouseEvent) => void;
+  private boundHandleMouseUp: (e: MouseEvent) => void;
+
   constructor(canvas: HTMLCanvasElement, map: TileInfo[][]) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.map = map;
 
+    // 綁定事件處理（保留引用以便 cleanup）
+    this.boundHandleWheel = this.handleWheel.bind(this);
+    this.boundHandleMouseDown = this.handlePanStart.bind(this);
+    this.boundHandleMouseMove = this.handlePanMove.bind(this);
+    this.boundHandleMouseUp = this.handlePanEnd.bind(this);
+
     this.resizeCanvas();
     window.addEventListener('resize', () => this.resizeCanvas());
+    this.canvas.addEventListener('wheel', this.boundHandleWheel, { passive: false });
+    this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
+    window.addEventListener('mousemove', this.boundHandleMouseMove);
+    window.addEventListener('mouseup', this.boundHandleMouseUp);
   }
 
   public setAgents(agents: AgentCharacter[]) {
@@ -67,6 +99,83 @@ export class GameEngine {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
     }
+    // 移除事件監聽
+    this.canvas.removeEventListener('wheel', this.boundHandleWheel);
+    this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
+    window.removeEventListener('mousemove', this.boundHandleMouseMove);
+    window.removeEventListener('mouseup', this.boundHandleMouseUp);
+  }
+
+  // ── 縮放與平移 ──────────────────────────────
+
+  /** 滑鼠滾輪縮放（以游標位置為中心） */
+  private handleWheel(e: WheelEvent) {
+    e.preventDefault();
+
+    const rect = this.canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const totalMapWidth = MAP_WIDTH * TILE_SIZE;
+    const totalMapHeight = MAP_HEIGHT * TILE_SIZE;
+
+    const oldZoom = this.zoom;
+    // 舊的置中偏移量
+    const oldBaseX = Math.max(0, (this.canvas.width - totalMapWidth * oldZoom) / 2);
+    const oldBaseY = Math.max(0, (this.canvas.height - totalMapHeight * oldZoom) / 2);
+
+    // 游標對應的地圖座標（不變量）
+    const mapX = (mouseX - oldBaseX - this.panX) / oldZoom;
+    const mapY = (mouseY - oldBaseY - this.panY) / oldZoom;
+
+    // 更新 zoom
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + delta));
+
+    // 新的置中偏移量
+    const newBaseX = Math.max(0, (this.canvas.width - totalMapWidth * this.zoom) / 2);
+    const newBaseY = Math.max(0, (this.canvas.height - totalMapHeight * this.zoom) / 2);
+
+    // 反推 pan 使同一地圖點仍在游標下方
+    this.panX = mouseX - newBaseX - this.zoom * mapX;
+    this.panY = mouseY - newBaseY - this.zoom * mapY;
+  }
+
+  /** 拖曳起始（左鍵或中鍵） */
+  private handlePanStart(e: MouseEvent) {
+    if (e.button === 0 || e.button === 1) {
+      e.preventDefault();
+      this.isDragging = true;
+      this.didDrag = false;
+      this.dragStartX = e.clientX;
+      this.dragStartY = e.clientY;
+      this.dragStartPanX = this.panX;
+      this.dragStartPanY = this.panY;
+    }
+  }
+
+  /** 拖曳平移移動（超過死區門檻才算拖曳） */
+  private handlePanMove(e: MouseEvent) {
+    if (!this.isDragging) return;
+    const dx = e.clientX - this.dragStartX;
+    const dy = e.clientY - this.dragStartY;
+    // 5px 死區：避免手抖誤觸拖曳
+    if (!this.didDrag && Math.hypot(dx, dy) < 5) return;
+    this.didDrag = true;
+    this.canvas.style.cursor = 'grabbing';
+    this.panX = this.dragStartPanX + dx;
+    this.panY = this.dragStartPanY + dy;
+  }
+
+  /** 拖曳結束：未超過死區視為點擊選角色 */
+  private handlePanEnd(e: MouseEvent) {
+    if (this.isDragging && !this.didDrag) {
+      // 沒有真正拖曳 → 視為點擊
+      this.handleClick(e.clientX, e.clientY);
+    }
+    this.isDragging = false;
+    this.didDrag = false;
+    this.canvas.style.cursor = 'grab';
   }
 
   /**
@@ -215,14 +324,15 @@ export class GameEngine {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // 計算 Center offset
+    // 計算 Center offset（基於原始尺寸）
     const totalMapWidth = MAP_WIDTH * TILE_SIZE;
     const totalMapHeight = MAP_HEIGHT * TILE_SIZE;
-    const offsetX = Math.max(0, (this.canvas.width - totalMapWidth) / 2);
-    const offsetY = Math.max(0, (this.canvas.height - totalMapHeight) / 2);
+    const baseOffsetX = Math.max(0, (this.canvas.width - totalMapWidth * this.zoom) / 2);
+    const baseOffsetY = Math.max(0, (this.canvas.height - totalMapHeight * this.zoom) / 2);
 
     ctx.save();
-    ctx.translate(offsetX, offsetY);
+    ctx.translate(baseOffsetX + this.panX, baseOffsetY + this.panY);
+    ctx.scale(this.zoom, this.zoom);
 
     // 1. 繪製辦公室 Tilemap
     const now = new Date();
@@ -413,13 +523,14 @@ export class GameEngine {
     const clickX = clientX - rect.left;
     const clickY = clientY - rect.top;
 
+    // 反轉 zoom + pan + baseOffset，將螢幕座標映射回地圖座標
     const totalMapWidth = MAP_WIDTH * TILE_SIZE;
     const totalMapHeight = MAP_HEIGHT * TILE_SIZE;
-    const offsetX = Math.max(0, (this.canvas.width - totalMapWidth) / 2);
-    const offsetY = Math.max(0, (this.canvas.height - totalMapHeight) / 2);
+    const baseOffsetX = Math.max(0, (this.canvas.width - totalMapWidth * this.zoom) / 2);
+    const baseOffsetY = Math.max(0, (this.canvas.height - totalMapHeight * this.zoom) / 2);
 
-    const mapX = clickX - offsetX;
-    const mapY = clickY - offsetY;
+    const mapX = (clickX - baseOffsetX - this.panX) / this.zoom;
+    const mapY = (clickY - baseOffsetY - this.panY) / this.zoom;
 
     // 檢查點擊是否在角色身上
     for (const agent of this.agents) {

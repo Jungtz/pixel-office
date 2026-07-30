@@ -56,18 +56,12 @@ export const OfficeCanvas: React.FC<OfficeCanvasProps> = ({
     }
   }, [activeDialogue]);
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (engineRef.current) {
-      engineRef.current.handleClick(e.clientX, e.clientY);
-    }
-  };
-
   return (
     <div className="relative w-full h-full bg-slate-950 flex items-center justify-center overflow-hidden">
       <canvas
         ref={canvasRef}
-        onClick={handleCanvasClick}
-        className="cursor-pointer block touch-none"
+        className="block touch-none"
+        style={{ cursor: 'grab' }}
       />
     </div>
   );
