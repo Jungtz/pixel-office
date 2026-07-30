@@ -345,7 +345,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
              {/* AI 驅動模式選擇 (連動 config.json) */}
             <div className="bg-slate-900/90 border border-slate-800 p-4 rounded flex flex-col gap-3">
               <label className="text-xs font-mono font-bold text-amber-400 flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4 text-amber-400" /> AI 對話驅動模式 (連動 config.json models 設定)：
+                <ShieldAlert className="w-4 h-4 text-amber-400" /> 對話驅動模式：
               </label>
 
               <div className="grid grid-cols-2 gap-2">
