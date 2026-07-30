@@ -3,7 +3,7 @@ import { RoleType } from '../game/types';
 import { ROLE_CONFIGS } from '../services/roles';
 import { soundManager } from '../services/sound';
 import { getProviderList, getProviderById, resolveModel, initModelConfig } from '../services/configService';
-import { Users, Sparkles, Play, ShieldAlert } from 'lucide-react';
+import { Users, Sparkles, Play, ShieldAlert, Key, Cpu, Globe } from 'lucide-react';
 
 export interface RoleSetupConfig {
   counts: Record<RoleType, number>;
@@ -69,6 +69,10 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
   const [resolvedProvider, setResolvedProvider] = useState<string>('');
   const [resolvedLabel, setResolvedLabel] = useState<string>('');
   const [apiKey, setApiKey] = useState<string>('');
+  const [userApiKey, setUserApiKey] = useState<string>('');
+  const [testingKey, setTestingKey] = useState(false);
+  const [keyTestResult, setKeyTestResult] = useState<'idle' | 'success' | 'failure'>('idle');
+  const [keyTestError, setKeyTestError] = useState<string>('');
   const [baseUrl, setBaseUrl] = useState<string>('');
   const [model, setModel] = useState<string>('');
   const [sdk, setSdk] = useState<string>('');
@@ -133,6 +137,9 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
   const handleSelectProvider = (provId: string) => {
     soundManager.playSelectSound();
     setSelectedProviderId(provId);
+    setUserApiKey('');
+    setKeyTestResult('idle');
+    setKeyTestError('');
     const provDef = getProviderById(provId);
     if (provDef) {
       const resolved = resolveModel();
@@ -157,7 +164,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
       counts,
       useMockAI: selectedProviderId === 'mock',
       provider: selectedProviderId,
-      apiKey,
+      apiKey: userApiKey || apiKey,
       baseUrl,
       model,
       sdk,
@@ -165,6 +172,37 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
       userName: userName || undefined
     });
   };
+
+  const handleTestKey = async () => {
+    if (!userApiKey || !currentProviderDef) return;
+    setTestingKey(true);
+    setKeyTestResult('idle');
+    setKeyTestError('');
+    try {
+      const res = await fetch('/api/test-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerId: selectedProviderId, apiKey: userApiKey })
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setKeyTestResult('success');
+      } else {
+        setKeyTestResult('failure');
+        setKeyTestError(data.error || '金鑰無效');
+      }
+    } catch {
+      setKeyTestResult('failure');
+      setKeyTestError('無法連線至伺服器');
+    } finally {
+      setTestingKey(false);
+    }
+  };
+
+  const currentProviderDef = getProviderById(selectedProviderId);
+  const apiKeyMissing = selectedProviderId !== 'mock' && currentProviderDef && !currentProviderDef.apiKey && !userApiKey;
+  const needsKey = selectedProviderId !== 'mock' && currentProviderDef && !currentProviderDef.apiKey;
+  const keyNotVerified = needsKey && keyTestResult !== 'success';
 
 
   return (
@@ -347,22 +385,98 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                   });
                 })()}
               </div>
+
+              {(() => {
+                const needsKey = selectedProviderId !== 'mock' && currentProviderDef && !currentProviderDef.apiKey;
+                if (!needsKey) return null;
+                return (
+                  <div className="mt-2 p-3 bg-slate-950/80 border border-amber-500/30 rounded flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-xs font-mono text-amber-300">
+                      <Key className="w-3.5 h-3.5" /> API Key (金鑰)：
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        placeholder={`請輸入 ${selectedProviderId} API Key...`}
+                        value={userApiKey}
+                        onChange={e => { setUserApiKey(e.target.value); setKeyTestResult('idle'); setKeyTestError(''); }}
+                        className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleTestKey}
+                        disabled={!userApiKey || testingKey}
+                        className="px-3 py-1.5 text-xs font-mono font-bold rounded border transition disabled:opacity-40 disabled:cursor-not-allowed bg-slate-800 text-amber-400 border-slate-700 hover:bg-slate-700 hover:border-amber-500/50"
+                      >
+                        {testingKey ? '測試中...' : '測試金鑰'}
+                      </button>
+                    </div>
+                    {keyTestResult === 'success' && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-green-400">
+                        <span className="w-2 h-2 rounded-full bg-green-400 inline-block" /> 金鑰驗證成功
+                      </div>
+                    )}
+                    {keyTestResult === 'failure' && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-red-400">
+                        <span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> {keyTestError}
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1 text-[10px] font-mono text-slate-500 mt-1 pt-1 border-t border-slate-800/80">
+                      {currentProviderDef.description && (
+                        <span className="text-slate-400">{currentProviderDef.description}</span>
+                      )}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        {currentProviderDef.baseURL && (
+                          <span className="flex items-center gap-1 text-slate-400">
+                            <Globe className="w-3 h-3" /> 端點：{currentProviderDef.baseURL}
+                          </span>
+                        )}
+                        {currentProviderDef.defaultModel && (
+                          <span className="flex items-center gap-1 text-sky-400">
+                            <Cpu className="w-3 h-3" /> 模型：{currentProviderDef.defaultModel}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Footer Submit Button */}
-            <div className="flex items-center justify-between border-t border-slate-800 pt-4">
-              <div className="text-xs font-mono text-slate-400 flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-amber-400" />
-                總入場人數：<span className="text-amber-300 font-bold">{totalMembers}</span> 人
-              </div>
+            <div className="flex flex-col gap-2 border-t border-slate-800 pt-4">
+              {apiKeyMissing && (
+                <div className="flex items-center gap-2 text-xs font-mono text-red-400 bg-red-950/40 border border-red-800/50 rounded px-3 py-2">
+                  <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  尚未輸入 {selectedProviderId} 的 API Key，請先填入有效金鑰並測試。
+                </div>
+              )}
+              {!apiKeyMissing && keyNotVerified && (
+                <div className="flex items-center gap-2 text-xs font-mono text-amber-300 bg-amber-950/30 border border-amber-800/50 rounded px-3 py-2">
+                  <Key className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  請點擊「測試金鑰」按鈕驗證 API Key 有效性。
+                </div>
+              )}
+              {!apiKeyMissing && !keyNotVerified && keyTestResult === 'success' && (
+                <div className="flex items-center gap-2 text-xs font-mono text-green-400 bg-green-950/20 border border-green-800/50 rounded px-3 py-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400 inline-block flex-shrink-0" />
+                  金鑰驗證通過，可以開始冒險！
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-mono text-slate-400 flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-amber-400" />
+                  總入場人數：<span className="text-amber-300 font-bold">{totalMembers}</span> 人
+                </div>
 
-              <button
-                type="submit"
-                disabled={totalMembers === 0}
-                className="px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold font-mono text-sm rounded border border-amber-500 shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Play className="w-4 h-4 fill-slate-950" /> 開啟辦公室冒險！
-              </button>
+                <button
+                  type="submit"
+                  disabled={totalMembers === 0 || apiKeyMissing || keyNotVerified}
+                  className="px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold font-mono text-sm rounded border border-amber-500 shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className="w-4 h-4 fill-slate-950" /> 開啟辦公室冒險！
+                </button>
+              </div>
             </div>
 
           </form>

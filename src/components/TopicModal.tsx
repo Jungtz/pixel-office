@@ -51,6 +51,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               providerId: llmConfig.provider,
+              apiKey: llmConfig.apiKey,
               speakerRole: 'TOPIC',
               speakerName: 'TopicGenerator'
             }),
