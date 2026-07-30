@@ -38,6 +38,28 @@ export interface AgentNeeds {
   social: number;   // 0 ~ 100
 }
 
+export interface PersonalityTraits {
+  sociability: number;       // 0~1：社牛↔邊緣人
+  diligence: number;         // 0~1：工作狂↔偷懶王
+  curiosity: number;         // 0~1：好奇寶寶↔專注當下
+  caffeineAddiction: number; // 0~1：咖啡成癮↔不喝咖啡
+  stressTolerance: number;   // 0~1：淡定↔玻璃心
+  expressiveness: number;    // 0~1：話多↔沉默
+  humorLevel: number;        // 0~1：搞笑↔正經
+}
+
+export type MoodState =
+  | 'neutral'
+  | 'happy'
+  | 'stressed'
+  | 'bored'
+  | 'excited'
+  | 'nervous'
+  | 'focused'
+  | 'lazy'
+  | 'panicked'
+  | 'proud';
+
 export interface AgentCharacter {
   id: string;
   name: string;
@@ -59,6 +81,12 @@ export interface AgentCharacter {
     workProgress: number; // 0 ~ 100
   };
   needs: AgentNeeds;
+  personality: PersonalityTraits;
+  mood: MoodState;
+  moodTimer: number;
+  miniBubble: string | null;
+  miniBubbleTimer: number;
+  lastMiniBubbleTime: number;
   activityStartTime: number;
   activityDuration: number;
   emojiBubble: string | null;
@@ -68,6 +96,8 @@ export interface AgentCharacter {
   lastIdleActionTime: number;
   eventMoveTarget: Position | 'desk' | 'sofa' | 'center' | null;
   eventMoveStatus: AgentStatus | null;
+  eventChainId: string | null;
+  eventChainStep: number;
 }
 
 export interface ChatMessage {
