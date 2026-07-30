@@ -161,18 +161,76 @@ app.get('/api/model-config', (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/test-key — 驗證使用者輸入的 API Key 是否有效
+ */
+app.post('/api/test-key', async (req: Request, res: Response) => {
+  try {
+    const { providerId, apiKey: frontendApiKey } = req.body;
+    if (!providerId || !frontendApiKey) {
+      return res.json({ valid: false, error: '缺少 providerId 或 apiKey' });
+    }
+
+    const config = loadConfig();
+    const provider = config.providers?.[providerId];
+    if (!provider) {
+      return res.json({ valid: false, error: `找不到 provider: ${providerId}` });
+    }
+
+    const baseUrl = (provider.baseURL || (provider.sdk === 'ollama' ? 'https://ollama.com' : 'https://api.openai.com/v1')).replace(/\/$/, '');
+    const endpoint = provider.sdk === 'ollama' ? `${baseUrl}/api/chat` : `${baseUrl}/chat/completions`;
+    const model = provider.defaultModel || (provider.sdk === 'ollama' ? 'gemma4:31b-cloud' : 'gpt-3.5-turbo');
+
+    const messagesPayload = [
+      { role: 'user', content: 'ping' }
+    ];
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${frontendApiKey}`
+      },
+      body: JSON.stringify(
+        provider.sdk === 'ollama'
+          ? { model, messages: messagesPayload, stream: false }
+          : { model, messages: messagesPayload, max_tokens: 1, temperature: 0 }
+      ),
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (response.ok) {
+      return res.json({ valid: true });
+    }
+
+    let errorMsg = `HTTP ${response.status}`;
+    try {
+      const body = await response.text();
+      const parsed = JSON.parse(body);
+      if (parsed.error?.message) {
+        errorMsg = parsed.error.message;
+      }
+    } catch {}
+
+    return res.json({ valid: false, error: errorMsg });
+  } catch (err: any) {
+    return res.json({ valid: false, error: err.message || '連線失敗' });
+  }
+});
+
+/**
  * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (支援角色發言與 🎲 AI 主題自動發想)
  */
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
-    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData, model: requestedModel } = req.body;
+    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData, model: requestedModel, apiKey: frontendApiKey } = req.body;
     const config = loadConfig();
     const provider = config.providers?.[providerId];
     const activeModel = requestedModel || provider?.defaultModel || '';
+    const effectiveApiKey = provider?.apiKey || frontendApiKey || '';
 
     const isTopicGen = speakerRole === 'TOPIC' || speakerName === 'TopicGenerator';
 
-    if (!provider || providerId === 'mock' || !provider.apiKey) {
+    if (!provider || providerId === 'mock' || !effectiveApiKey) {
       console.log(`[LLM Call] Mode: Mock AI | Type: ${isTopicGen ? '🎲 Topic Gen' : '💬 Dialogue'} | Speaker: ${speakerName}`);
       return res.json({ status: 'mock' });
     }
@@ -244,7 +302,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${provider.apiKey}`
+            'Authorization': `Bearer ${effectiveApiKey}`
           },
           body: JSON.stringify({
             model: activeModel || 'gemma4:31b-cloud',
@@ -258,7 +316,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${provider.apiKey}`
+            'Authorization': `Bearer ${effectiveApiKey}`
           },
           body: JSON.stringify({
             model: activeModel || 'gpt-3.5-turbo',
