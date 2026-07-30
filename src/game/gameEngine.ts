@@ -29,10 +29,22 @@ export class GameEngine {
   private dragStartPanX: number = 0;
   private dragStartPanY: number = 0;
 
+  // Touch 觸控手勢狀態
+  private touchStartDist: number = 0;
+  private touchStartZoom: number = 1.0;
+  private touchStartCenter: { x: number; y: number } = { x: 0, y: 0 };
+  private touchStartPan: { x: number; y: number } = { x: 0, y: 0 };
+  private touchStartSinglePos: { x: number; y: number } = { x: 0, y: 0 };
+  private isTouchDragging: boolean = false;
+  private didTouchMove: boolean = false;
+
   private boundHandleWheel: (e: WheelEvent) => void;
   private boundHandleMouseDown: (e: MouseEvent) => void;
   private boundHandleMouseMove: (e: MouseEvent) => void;
   private boundHandleMouseUp: (e: MouseEvent) => void;
+  private boundHandleTouchStart: (e: TouchEvent) => void;
+  private boundHandleTouchMove: (e: TouchEvent) => void;
+  private boundHandleTouchEnd: (e: TouchEvent) => void;
 
   constructor(canvas: HTMLCanvasElement, map: TileInfo[][]) {
     this.canvas = canvas;
@@ -44,12 +56,22 @@ export class GameEngine {
     this.boundHandleMouseMove = this.handlePanMove.bind(this);
     this.boundHandleMouseUp = this.handlePanEnd.bind(this);
 
+    this.boundHandleTouchStart = this.handleTouchStart.bind(this);
+    this.boundHandleTouchMove = this.handleTouchMove.bind(this);
+    this.boundHandleTouchEnd = this.handleTouchEnd.bind(this);
+
     this.resizeCanvas();
     window.addEventListener('resize', () => this.resizeCanvas());
     this.canvas.addEventListener('wheel', this.boundHandleWheel, { passive: false });
     this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
     window.addEventListener('mousemove', this.boundHandleMouseMove);
     window.addEventListener('mouseup', this.boundHandleMouseUp);
+
+    // 觸控手勢事件綁定
+    this.canvas.addEventListener('touchstart', this.boundHandleTouchStart, { passive: false });
+    this.canvas.addEventListener('touchmove', this.boundHandleTouchMove, { passive: false });
+    window.addEventListener('touchend', this.boundHandleTouchEnd);
+    window.addEventListener('touchcancel', this.boundHandleTouchEnd);
   }
 
   public setAgents(agents: AgentCharacter[]) {
@@ -99,6 +121,50 @@ export class GameEngine {
     this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
     window.removeEventListener('mousemove', this.boundHandleMouseMove);
     window.removeEventListener('mouseup', this.boundHandleMouseUp);
+    this.canvas.removeEventListener('touchstart', this.boundHandleTouchStart);
+    this.canvas.removeEventListener('touchmove', this.boundHandleTouchMove);
+    window.removeEventListener('touchend', this.boundHandleTouchEnd);
+    window.removeEventListener('touchcancel', this.boundHandleTouchEnd);
+  }
+
+  /**
+   * 以指定畫面座標 (centerX, centerY) 為軸心進行縮放
+   */
+  public zoomAt(zoomDeltaOrTarget: number, centerX: number, centerY: number, isAbsolute: boolean = false) {
+    const totalMapWidth = MAP_WIDTH * TILE_SIZE;
+    const totalMapHeight = MAP_HEIGHT * TILE_SIZE;
+
+    const oldZoom = this.zoom;
+    const oldBaseX = Math.max(0, (this.canvas.width - totalMapWidth * oldZoom) / 2);
+    const oldBaseY = Math.max(0, (this.canvas.height - totalMapHeight * oldZoom) / 2);
+
+    const mapX = (centerX - oldBaseX - this.panX) / oldZoom;
+    const mapY = (centerY - oldBaseY - this.panY) / oldZoom;
+
+    const targetZoom = isAbsolute
+      ? zoomDeltaOrTarget
+      : oldZoom + zoomDeltaOrTarget;
+    this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom));
+
+    const newBaseX = Math.max(0, (this.canvas.width - totalMapWidth * this.zoom) / 2);
+    const newBaseY = Math.max(0, (this.canvas.height - totalMapHeight * this.zoom) / 2);
+
+    this.panX = centerX - newBaseX - this.zoom * mapX;
+    this.panY = centerY - newBaseY - this.zoom * mapY;
+  }
+
+  public zoomIn() {
+    this.zoomAt(ZOOM_STEP * 2, this.canvas.width / 2, this.canvas.height / 2);
+  }
+
+  public zoomOut() {
+    this.zoomAt(-ZOOM_STEP * 2, this.canvas.width / 2, this.canvas.height / 2);
+  }
+
+  public resetZoom() {
+    this.zoom = 1.0;
+    this.panX = 0;
+    this.panY = 0;
   }
 
   private handleWheel(e: WheelEvent) {
@@ -108,24 +174,73 @@ export class GameEngine {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const totalMapWidth = MAP_WIDTH * TILE_SIZE;
-    const totalMapHeight = MAP_HEIGHT * TILE_SIZE;
-
-    const oldZoom = this.zoom;
-    const oldBaseX = Math.max(0, (this.canvas.width - totalMapWidth * oldZoom) / 2);
-    const oldBaseY = Math.max(0, (this.canvas.height - totalMapHeight * oldZoom) / 2);
-
-    const mapX = (mouseX - oldBaseX - this.panX) / oldZoom;
-    const mapY = (mouseY - oldBaseY - this.panY) / oldZoom;
-
     const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-    this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + delta));
+    this.zoomAt(delta, mouseX, mouseY);
+  }
 
-    const newBaseX = Math.max(0, (this.canvas.width - totalMapWidth * this.zoom) / 2);
-    const newBaseY = Math.max(0, (this.canvas.height - totalMapHeight * this.zoom) / 2);
+  private handleTouchStart(e: TouchEvent) {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      this.isTouchDragging = true;
+      this.didTouchMove = false;
+      this.touchStartSinglePos = { x: touch.clientX, y: touch.clientY };
+      this.touchStartPan = { x: this.panX, y: this.panY };
+    } else if (e.touches.length === 2) {
+      this.isTouchDragging = false;
+      this.didTouchMove = true;
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      this.touchStartDist = dist;
+      this.touchStartZoom = this.zoom;
 
-    this.panX = mouseX - newBaseX - this.zoom * mapX;
-    this.panY = mouseY - newBaseY - this.zoom * mapY;
+      const rect = this.canvas.getBoundingClientRect();
+      const centerX = (t1.clientX + t2.clientX) / 2 - rect.left;
+      const centerY = (t1.clientY + t2.clientY) / 2 - rect.top;
+      this.touchStartCenter = { x: centerX, y: centerY };
+      this.touchStartPan = { x: this.panX, y: this.panY };
+    }
+  }
+
+  private handleTouchMove(e: TouchEvent) {
+    if (e.touches.length === 1 && this.isTouchDragging) {
+      if (e.cancelable) e.preventDefault();
+      const touch = e.touches[0];
+      const dx = touch.clientX - this.touchStartSinglePos.x;
+      const dy = touch.clientY - this.touchStartSinglePos.y;
+      if (!this.didTouchMove && Math.hypot(dx, dy) < 5) return;
+      this.didTouchMove = true;
+      this.panX = this.touchStartPan.x + dx;
+      this.panY = this.touchStartPan.y + dy;
+    } else if (e.touches.length === 2 && this.touchStartDist > 0) {
+      if (e.cancelable) e.preventDefault();
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const currDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const scale = currDist / this.touchStartDist;
+      const newZoom = this.touchStartZoom * scale;
+      this.zoomAt(newZoom, this.touchStartCenter.x, this.touchStartCenter.y, true);
+    }
+  }
+
+  private handleTouchEnd(e: TouchEvent) {
+    if (this.isTouchDragging && !this.didTouchMove && e.touches.length === 0) {
+      const touch = e.changedTouches[0];
+      if (touch) {
+        this.handleClick(touch.clientX, touch.clientY);
+      }
+    }
+    if (e.touches.length === 0) {
+      this.isTouchDragging = false;
+      this.didTouchMove = false;
+      this.touchStartDist = 0;
+    } else if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      this.isTouchDragging = true;
+      this.didTouchMove = true;
+      this.touchStartSinglePos = { x: touch.clientX, y: touch.clientY };
+      this.touchStartPan = { x: this.panX, y: this.panY };
+    }
   }
 
   private handlePanStart(e: MouseEvent) {
