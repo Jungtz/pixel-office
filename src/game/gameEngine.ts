@@ -92,6 +92,14 @@ export class GameEngine {
         }
       }
 
+      // 倒數迷你對話泡泡顯示時間
+      if (agent.miniBubbleTimer > 0) {
+        agent.miniBubbleTimer -= dt;
+        if (agent.miniBubbleTimer <= 0) {
+          agent.miniBubble = null;
+        }
+      }
+
       // 如果有路徑，持續移動
       if (agent.path.length > 0) {
         const eavesdropUntil = this.eavesdropTimers.get(agent.id);
@@ -274,6 +282,29 @@ export class GameEngine {
         drawEmojiBubble(ctx, displayEmoji, agent.pixelPos.x, agent.pixelPos.y, TILE_SIZE);
       }
 
+      // 迷你對話泡泡（人物自發短語，在 Emoji 泡泡上方）
+      if (agent.miniBubble && !agent.speechBubble) {
+        ctx.save();
+        ctx.font = '9px "Noto Sans TC", sans-serif';
+        const miniText = agent.miniBubble.length > 10 ? agent.miniBubble.substring(0, 9) + '…' : agent.miniBubble;
+        const miniMetrics = ctx.measureText(miniText);
+        const miniPad = 4;
+        const miniW = miniMetrics.width + miniPad * 2;
+        const miniH = 15;
+        const miniX = agent.pixelPos.x + TILE_SIZE / 2 - miniW / 2;
+        const miniY = agent.pixelPos.y - 30;
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.92)';
+        ctx.fillRect(miniX, miniY, miniW, miniH);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(miniX, miniY, miniW, miniH);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(miniText, miniX + miniW / 2, miniY + miniH / 2);
+        ctx.restore();
+      }
+
       // 角色名稱與職稱標籤
       ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
       ctx.fillRect(agent.pixelPos.x - 10, agent.pixelPos.y + TILE_SIZE + 2, TILE_SIZE + 20, 14);
@@ -285,6 +316,25 @@ export class GameEngine {
         agent.pixelPos.x + TILE_SIZE / 2,
         agent.pixelPos.y + TILE_SIZE + 13
       );
+
+      // 情緒小圖標（名字右側）
+      if (agent.mood && agent.mood !== 'neutral') {
+        const moodEmojis: Record<string, string> = {
+          happy: '😊', stressed: '😫', bored: '😑', excited: '🤩',
+          nervous: '😰', focused: '💪', lazy: '😴', panicked: '😱', proud: '😎'
+        };
+        const moodEmoji = moodEmojis[agent.mood] || '';
+        if (moodEmoji) {
+          ctx.font = '9px sans-serif';
+          ctx.fillStyle = '#f8fafc';
+          ctx.textAlign = 'center';
+          ctx.fillText(
+            moodEmoji,
+            agent.pixelPos.x + TILE_SIZE / 2 + 16,
+            agent.pixelPos.y + TILE_SIZE + 13
+          );
+        }
+      }
 
       // 需求進度條（選中角色或需求危急時顯示）
       const showNeedsBar = agent.id === this.selectedAgentId ||
