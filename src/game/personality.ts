@@ -15,7 +15,7 @@ function pseudoRandom(seed: number): () => number {
   };
 }
 
-const ROLE_TRAIT_BIASES: Record<RoleType, Partial<PersonalityTraits>> = {
+const ROLE_TRAIT_BIASES: Record<string, Partial<PersonalityTraits>> = {
   BOSS:  { sociability: 0.78, diligence: 0.60, curiosity: 0.30, caffeineAddiction: 0.50, stressTolerance: 0.55, expressiveness: 0.80, humorLevel: 0.40 },
   PM:    { sociability: 0.82, diligence: 0.75, curiosity: 0.35, caffeineAddiction: 0.65, stressTolerance: 0.35, expressiveness: 0.78, humorLevel: 0.38 },
   RD:    { sociability: 0.40, diligence: 0.82, curiosity: 0.55, caffeineAddiction: 0.85, stressTolerance: 0.58, expressiveness: 0.35, humorLevel: 0.50 },
@@ -23,6 +23,18 @@ const ROLE_TRAIT_BIASES: Record<RoleType, Partial<PersonalityTraits>> = {
   UIUX:  { sociability: 0.55, diligence: 0.70, curiosity: 0.80, caffeineAddiction: 0.60, stressTolerance: 0.40, expressiveness: 0.70, humorLevel: 0.48 },
   AD:    { sociability: 0.60, diligence: 0.55, curiosity: 0.85, caffeineAddiction: 0.45, stressTolerance: 0.50, expressiveness: 0.88, humorLevel: 0.62 },
   INTERN:{ sociability: 0.65, diligence: 0.88, curiosity: 0.75, caffeineAddiction: 0.30, stressTolerance: 0.20, expressiveness: 0.55, humorLevel: 0.55 },
+  DAVIS: { sociability: 0.42, diligence: 0.80, curiosity: 0.68, caffeineAddiction: 0.58, stressTolerance: 0.60, expressiveness: 0.40, humorLevel: 0.30 },
+};
+
+// 動態角色無專屬特質時的通用基準
+const DEFAULT_TRAITS: PersonalityTraits = {
+  sociability: 0.50,
+  diligence: 0.65,
+  curiosity: 0.60,
+  caffeineAddiction: 0.50,
+  stressTolerance: 0.50,
+  expressiveness: 0.55,
+  humorLevel: 0.50,
 };
 
 function clamp(v: number): number {
@@ -32,7 +44,7 @@ function clamp(v: number): number {
 export function generatePersonality(role: RoleType, agentIndex: number): PersonalityTraits {
   const rng = pseudoRandom(agentIndex * 7919 + role.charCodeAt(0) * 331);
 
-  const bias = ROLE_TRAIT_BIASES[role];
+  const bias = ROLE_TRAIT_BIASES[role] || DEFAULT_TRAITS;
 
   return {
     sociability:       clamp(bias.sociability!       + (rng() - 0.5) * 0.55),

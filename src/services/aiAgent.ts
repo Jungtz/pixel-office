@@ -47,7 +47,7 @@ const MOCK_DIALOGUE_SCRIPTS: Record<string, string[]> = {
 };
 
 // 一般專案主題對話範本
-const ROLE_TOPIC_TEMPLATES: Record<RoleType, string[]> = {
+const ROLE_TOPIC_TEMPLATES: Record<string, string[]> = {
   PM: [
     '關於「{topic}」，我先把 Task 拆解到 JIRA 上，大家確認一下排程優先級。',
     '這個「{topic}」的 ETA 訂在週五，有任何風險或 Blocker 請第一時間回報！',
@@ -84,11 +84,16 @@ const ROLE_TOPIC_TEMPLATES: Record<RoleType, string[]> = {
     '「{topic}」關係到我們團隊今年的核心 KPI，這仗必須打贏！',
     '只要成功搞定「{topic}」，這個月加菜、年終獎金翻倍，大家一起衝！',
     '各位同仁，把「{topic}」做好，我們就要向創投與市場證明實力了！'
+  ],
+  DAVIS: [
+    '關於「{topic}」，我先撈一下相關數據，確認用戶行為趨勢再決定優先級。',
+    '我已經針對「{topic}」建立追蹤指標，上線後用 A/B Test 驗證成效。',
+    '數據顯示「{topic}」的影響範圍集中在特定族群，建議精準資源投放。'
   ]
 };
 
 // 緊急事件 / Bug / 崩潰 / 瓶頸對話範本 (專屬語境與反應)
-const ROLE_INCIDENT_TEMPLATES: Record<RoleType, string[]> = {
+const ROLE_INCIDENT_TEMPLATES: Record<string, string[]> = {
   PM: [
     '針對緊急事件「{topic}」，優先級拉到 P0！大家立刻暫停次要工作，成立 War Room 專注修復！',
     '這個「{topic}」影響範圍很大，我先通知客服與客戶管理團隊發佈維護公告！',
@@ -119,6 +124,10 @@ const ROLE_INCIDENT_TEMPLATES: Record<RoleType, string[]> = {
   BOSS: [
     '「{topic}」非常嚴重！相關團隊全力搶修，問題沒解決前大家都不要走！',
     '搶修「{topic}」辛苦了！今晚加班費照算，宵夜拿鐵我買單，大家加油把難關渡過！'
+  ],
+  DAVIS: [
+    '「{topic}」我先追蹤錯誤率的變化趨勢，判斷影響範圍與復原狀況。',
+    '正在針對「{topic}」交叉比對數據，確認是否影響特定使用者族群。'
   ]
 };
 
