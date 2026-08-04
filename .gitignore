@@ -42,3 +42,4 @@ config.json
 
 # Vite temp cache
 *.timestamp-*.mjs
+setup-firewall.ps1
