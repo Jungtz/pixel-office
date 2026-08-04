@@ -4,7 +4,7 @@ import { findPath } from './game/pathfinding';
 import { AgentCharacter, ChatMessage, Position, RoleType, MeetingState } from './game/types';
 import { fetchLLMResponse, LLMConfig } from './services/aiAgent';
 import { getProviderList, getProviderById, getGameLoopConfig } from './services/configService';
-import { ROLE_CONFIGS } from './services/roles';
+import { ROLE_CONFIGS, ROLE_ALIASES } from './services/roles';
 import { soundManager } from './services/sound';
 import { tickBehavior } from './game/behaviorEngine';
 import { triggerRandomEvent, clearPendingChain } from './game/events';
@@ -548,10 +548,7 @@ export const App: React.FC = () => {
 
   // 7. 解析 AI 回覆中的點名 @Role 或 @Name（使用者扮演角色優先匹配）
   const parseNomination = (text: string): AgentCharacter | null => {
-    const roleAliases: Record<string, RoleType> = {
-      'PM': 'PM', 'RD': 'RD', 'QA': 'QA', 'UIUX': 'UIUX', 'UI': 'UIUX',
-      'AD': 'AD', 'INTERN': 'INTERN', 'BOSS': 'BOSS',
-    };
+    const roleAliases: Record<string, string> = ROLE_ALIASES;
     const match = text.match(/@(\S+?)(?:\s|$|[,，。.、!！?？]|$)/);
     if (!match) return null;
 

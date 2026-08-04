@@ -2,7 +2,11 @@
  * AI 辦公室大亂鬥 - 遊戲核心型別與資料結構
  */
 
-export type RoleType = 'PM' | 'RD' | 'QA' | 'UIUX' | 'AD' | 'INTERN' | 'BOSS';
+/**
+ * 角色型別為動態字串：只要在 src/prompts 新增 {id}.md 即自動成為新角色，
+ * 故不以 union type 窮舉。
+ */
+export type RoleType = string;
 
 export interface RoleConfig {
   id: RoleType;
@@ -16,6 +20,7 @@ export interface RoleConfig {
   catchphrases: string[];
   systemPrompt: string;
   interests: string[];
+  defaultCount: number;
 }
 
 export interface Position {

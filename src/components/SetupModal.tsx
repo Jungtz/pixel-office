@@ -6,14 +6,14 @@ import { getProviderList, getProviderById, resolveModel, initModelConfig } from 
 import { Users, Sparkles, Play, ShieldAlert, Key, Cpu, Globe } from 'lucide-react';
 
 export interface RoleSetupConfig {
-  counts: Record<RoleType, number>;
+  counts: Record<string, number>;
   useMockAI: boolean;
   apiKey?: string;
   provider: string;
   baseUrl?: string;
   model?: string;
   sdk?: string;
-  userRole?: RoleType;
+  userRole?: string;
   userName?: string;
 }
 
@@ -22,35 +22,25 @@ interface SetupModalProps {
   onStart: (config: RoleSetupConfig) => void;
 }
 
-const ROLE_SHORT_CODES: Record<RoleType, string> = {
-  PM: 'PM',
-  RD: 'RD',
-  QA: 'QA',
-  UIUX: 'UI',
-  AD: 'AD',
-  INTERN: 'IN',
-  BOSS: 'BO'
-};
+const getShortCode = (roleId: string): string => roleId.slice(0, 2);
 
 const STORAGE_KEY_COUNTS = 'roundtable-setup-counts';
 const STORAGE_KEY_PROVIDER = 'roundtable-setup-provider';
 
-const DEFAULT_COUNTS: Record<RoleType, number> = {
-  PM: 1,
-  RD: 2,
-  QA: 1,
-  UIUX: 1,
-  AD: 1,
-  INTERN: 1,
-  BOSS: 1
+const buildDefaultCounts = (): Record<string, number> => {
+  const counts: Record<string, number> = {};
+  for (const roleId of Object.keys(ROLE_CONFIGS)) {
+    counts[roleId] = ROLE_CONFIGS[roleId].defaultCount;
+  }
+  return counts;
 };
 
-const loadSavedCounts = (): Record<RoleType, number> => {
+const loadSavedCounts = (): Record<string, number> => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY_COUNTS);
-    if (saved) return { ...DEFAULT_COUNTS, ...JSON.parse(saved) };
+    if (saved) return { ...buildDefaultCounts(), ...JSON.parse(saved) };
   } catch { /* localStorage 損毀則回退預設值 */ }
-  return { ...DEFAULT_COUNTS };
+  return buildDefaultCounts();
 };
 
 const loadSavedProvider = (): string | null => {
@@ -62,7 +52,7 @@ const loadSavedProvider = (): string | null => {
 };
 
 export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
-  const [counts, setCounts] = useState<Record<RoleType, number>>(loadSavedCounts);
+  const [counts, setCounts] = useState<Record<string, number>>(loadSavedCounts);
 
   const providers = getProviderList();
   const [selectedProviderId, setSelectedProviderId] = useState<string>(() => loadSavedProvider() || '');
@@ -76,7 +66,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
   const [baseUrl, setBaseUrl] = useState<string>('');
   const [model, setModel] = useState<string>('');
   const [sdk, setSdk] = useState<string>('');
-  const [userRole, setUserRole] = useState<RoleType | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
@@ -126,10 +116,10 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
 
   if (!isOpen) return null;
 
-  const handleCountChange = (role: RoleType, delta: number) => {
+  const handleCountChange = (role: string, delta: number) => {
     soundManager.playSelectSound();
     setCounts(prev => {
-      const nextVal = Math.max(0, Math.min(3, prev[role] + delta));
+      const nextVal = Math.max(0, Math.min(3, (prev[role] || 0) + delta));
       return { ...prev, [role]: nextVal };
     });
   };
@@ -247,9 +237,9 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
             
             {/* 角色數量選擇 Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1">
-              {(Object.keys(ROLE_CONFIGS) as RoleType[]).map(roleKey => {
+              {(Object.keys(ROLE_CONFIGS) as string[]).map(roleKey => {
                 const role = ROLE_CONFIGS[roleKey];
-                const count = counts[roleKey];
+                const count = counts[roleKey] || 0;
                 const isUserRole = userRole === roleKey;
 
                 return (
@@ -267,7 +257,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                           className="w-9 h-9 rounded border border-amber-400/80 flex items-center justify-center font-bold text-white text-xs font-mono shadow flex-shrink-0"
                           style={{ backgroundColor: role.avatarColor }}
                         >
-                          {ROLE_SHORT_CODES[roleKey]}
+                          {getShortCode(roleKey)}
                         </div>
                         <div className="min-w-0">
                           <div
