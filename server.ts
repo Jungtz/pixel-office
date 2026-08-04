@@ -274,6 +274,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         })
       ];
 
+      // OpenAI 相容 API 要求最後一條訊息必須是 user role
+      if (messagesPayload[messagesPayload.length - 1].role === 'assistant') {
+        messagesPayload.push({ role: 'user', content: '請針對上述對話繼續回應。' });
+      }
+
     }
 
     const baseUrl = (provider.baseURL || (provider.sdk === 'ollama' ? 'https://ollama.com' : 'https://api.openai.com/v1')).replace(/\/$/, '');
