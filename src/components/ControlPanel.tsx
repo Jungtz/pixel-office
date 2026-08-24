@@ -84,7 +84,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               </div>
               <div>
                 <h1 className="text-sm font-bold font-mono text-amber-400 tracking-wide flex items-center gap-2">
-                  AI TOWN 辦公室大亂鬥
+                  PixelOffice 像素辦公室
                   {isMeetingActive && (
                     <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded font-mono animate-pulse">
                       ● 會議中

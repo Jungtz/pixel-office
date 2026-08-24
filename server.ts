@@ -377,5 +377,5 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 AI Roundtable Backend Server listening on http://localhost:${PORT}`);
+  console.log(`🚀 PixelOffice Backend Server listening on http://localhost:${PORT}`);
 });

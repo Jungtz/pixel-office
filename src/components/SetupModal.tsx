@@ -226,10 +226,10 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
           <div className="text-center border-b border-slate-800 pb-4">
             <h1 className="text-2xl font-bold text-amber-400 font-mono flex items-center justify-center gap-2 tracking-wider">
               <Sparkles className="w-6 h-6 text-amber-400" />
-              AI 辦公室大亂鬥 - 團隊配置
+              PixelOffice - 團隊配置
             </h1>
             <p className="text-slate-400 text-xs mt-1 font-mono">
-              請選擇入場角色與人數，建立屬於你的 AI Town 職場冒險團隊！
+              請選擇入場角色與人數，建立屬於你的 PixelOffice 職場冒險團隊！
             </p>
           </div>
 

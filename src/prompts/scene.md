@@ -1,4 +1,4 @@
-【AI 辦公室大亂鬥 — 當前場景】
+【PixelOffice 像素辦公室 — 當前場景】
 現在時間：{{time}}
 辦公室成員（共 {{totalPeople}} 人）：
 {{members}}
