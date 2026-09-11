@@ -386,6 +386,81 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   }
 });
 
+function formatSessionStamp(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+/**
+ * 主題轉檔名片段：剔除 Windows 非法字元與換行，限長 40 字
+ */
+function sanitizeFilename(topic: string): string {
+  const clean = topic
+    .replace(/[\\/:*?"<>|\r\n]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40)
+    .replace(/\.+$/, '');
+  return clean || 'untitled';
+}
+
+/**
+ * POST /api/chat-log - 接收前端對話紀錄並存成 Markdown 檔 (chat-logs/)
+ * 檔名由後端依 sessionId + 主題產生，前端只傳資料不指定檔名。
+ */
+app.post('/api/chat-log', (req: Request, res: Response) => {
+  try {
+    const { sessionId, topic, startedAt, messages } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.json({ status: 'skipped', reason: 'empty messages' });
+    }
+
+    const stamp = typeof sessionId === 'string' && /^\d{8}-\d{6}$/.test(sessionId)
+      ? sessionId
+      : formatSessionStamp(new Date());
+    const slug = sanitizeFilename(typeof topic === 'string' ? topic : '');
+    const dir = path.join(process.cwd(), 'chat-logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const filename = `${stamp}-${slug}.md`;
+
+    // 同一 session 換主題會產生新檔名，刪掉同 stamp 的舊檔，確保單 session 單檔
+    // stamp 已嚴格驗證為 \d{8}-\d{6} 格式，前綴比對不會波及其他檔案
+    for (const f of fs.readdirSync(dir)) {
+      if (f.startsWith(`${stamp}-`) && f.endsWith('.md') && f !== filename) {
+        try { fs.unlinkSync(path.join(dir, f)); } catch {}
+      }
+    }
+
+    const lines = messages.slice(0, 5000).map((m: any) => {
+      const time = typeof m?.timestamp === 'string' ? m.timestamp : '';
+      const name = typeof m?.speakerName === 'string' ? m.speakerName : 'unknown';
+      const role = typeof m?.speakerRole === 'string' ? m.speakerRole : '';
+      const text = typeof m?.text === 'string' ? m.text.replace(/\r?\n/g, ' ').slice(0, 2000) : '';
+      return `- [${time}] **${name}** (${role})：${text}`;
+    });
+
+    const md = [
+      '# PixelOffice 對話紀錄',
+      '',
+      `- 主題：${typeof topic === 'string' && topic ? topic : '（未定）'}`,
+      `- 開始時間：${typeof startedAt === 'string' ? startedAt : ''}`,
+      `- 最後更新：${new Date().toLocaleString('zh-TW')}`,
+      `- 則數：${lines.length}`,
+      '',
+      '## 對話',
+      '',
+      ...lines,
+      ''
+    ].join('\n');
+
+    fs.writeFileSync(path.join(dir, filename), md, 'utf-8');
+    return res.json({ status: 'saved', filename });
+  } catch (err: any) {
+    console.error('Save chat log failed:', err.message);
+    return res.json({ status: 'error', error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 PixelOffice Backend Server listening on http://localhost:${PORT}`);
 });

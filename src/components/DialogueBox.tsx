@@ -15,6 +15,7 @@ interface DialogueBoxProps {
   autoAdvanceMs?: number;
   aiTakeover?: boolean;
   onToggleAiTakeover?: () => void;
+  isPaused?: boolean;
 }
 
 const ROLE_SHORT_CODES: Record<string, string> = {
@@ -37,7 +38,8 @@ export const DialogueBox: React.FC<DialogueBoxProps> = ({
   nextLabel,
   autoAdvanceMs,
   aiTakeover,
-  onToggleAiTakeover
+  onToggleAiTakeover,
+  isPaused
 }) => {
   const [displayedText, setDisplayedText] = useState('');
   const [isFinished, setIsFinished] = useState(false);
@@ -82,7 +84,7 @@ export const DialogueBox: React.FC<DialogueBoxProps> = ({
   }, [userTurn]);
 
   useEffect(() => {
-    if (isFinished && onNext && autoAdvanceMs && autoAdvanceMs > 0 && !isBusy) {
+    if (isFinished && onNext && autoAdvanceMs && autoAdvanceMs > 0 && !isBusy && !isPaused) {
       const seconds = Math.ceil(autoAdvanceMs / 1000);
       setCountdown(seconds);
 
@@ -110,7 +112,7 @@ export const DialogueBox: React.FC<DialogueBoxProps> = ({
         countdownTimer.current = null;
       }
     };
-  }, [isFinished, onNext, autoAdvanceMs, isBusy]);
+  }, [isFinished, onNext, autoAdvanceMs, isBusy, isPaused]);
 
   useEffect(() => {
     return () => {

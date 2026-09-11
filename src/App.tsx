@@ -45,6 +45,8 @@ export const App: React.FC = () => {
 
   const [aiTakeover, setAiTakeover] = useState<boolean>(false);
   const aiTakeoverRef = useRef<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const isPausedRef = useRef<boolean>(false);
   const [roundsExhausted, setRoundsExhausted] = useState<boolean>(false);
 
   const inGameTimeRef = useRef<number>(9);
@@ -53,8 +55,14 @@ export const App: React.FC = () => {
     aiTakeoverRef.current = aiTakeover;
   }, [aiTakeover]);
 
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
   const lastDialogueTime = useRef<number>(Date.now());
   const dialogueRoundCount = useRef<number>(0);
+  const sessionIdRef = useRef<string>('');
+  const sessionStartedAtRef = useRef<string>('');
   const isGeneratingRef = useRef<boolean>(false);
   const activeDialogueRef = useRef<boolean>(false);
   const userTurnPendingRef = useRef<boolean>(false);
@@ -70,6 +78,34 @@ export const App: React.FC = () => {
   useEffect(() => {
     userTurnPendingRef.current = userTurnPending !== null;
   }, [userTurnPending]);
+
+  // 2b. 對話自動存檔：新訊息後 debounce POST 到後端寫成 chat-logs/*.md
+  useEffect(() => {
+    if (!sessionIdRef.current || chatMessages.length === 0) return;
+
+    const topic = meetingState.topic || currentTopic;
+    const payload = {
+      sessionId: sessionIdRef.current,
+      topic,
+      startedAt: sessionStartedAtRef.current,
+      messages: chatMessages.map(m => ({
+        timestamp: m.timestamp,
+        speakerName: m.speakerName,
+        speakerRole: m.speakerRole,
+        text: m.text
+      }))
+    };
+
+    const timer = setTimeout(() => {
+      fetch('/api/chat-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.warn('[ChatLog Autosave] failed:', err));
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [chatMessages, currentTopic, meetingState.topic]);
 
   // 1. 第一階段：初始化團隊角色與 Provider，並開啟 TopicModal 選擇主題
   const handleStartSetup = (config: RoleSetupConfig) => {
@@ -90,6 +126,12 @@ export const App: React.FC = () => {
   const handleConfirmTopic = (selectedTopic: string) => {
     if (!pendingConfig) return;
     setCurrentTopic(selectedTopic);
+
+    // 新冒險 = 新 log session（檔名時間戳）
+    const now = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    sessionIdRef.current = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+    sessionStartedAtRef.current = now.toLocaleString('zh-TW');
 
     const newAgents: AgentCharacter[] = [];
     let deskIdx = 0;
@@ -160,6 +202,8 @@ export const App: React.FC = () => {
     setIsTopicOpen(false);
     dialogueRoundCount.current = 0;
     setRoundsExhausted(false);
+    setIsPaused(false);
+    isPausedRef.current = false;
     lastBehaviorTick.current = Date.now();
     lastEventTime.current = Date.now();
     inGameTimeRef.current = 9;
@@ -182,10 +226,17 @@ export const App: React.FC = () => {
     const loopConfig = getGameLoopConfig();
 
     const interval = setInterval(async () => {
+      const now = Date.now();
+
+      // 暫停中：凍結一切自主行為（手動下一步／插話不受影響）
+      if (isPausedRef.current) {
+        lastBehaviorTick.current = now;
+        return;
+      }
+
       // 如果正在開會，交由會議邏輯驅動
       if (meetingState.isActive) return;
 
-      const now = Date.now();
       const deltaSeconds = Math.min((now - lastBehaviorTick.current) / 1000, 10);
       lastBehaviorTick.current = now;
 
@@ -328,7 +379,7 @@ export const App: React.FC = () => {
     return { time: timeStr, totalPeople, members, topic, roundNumber: dialogueRoundCount.current + 1, maxRounds, remaining };
   };
 
-  const triggerAgentSpeech = async (speaker: AgentCharacter, topic?: string) => {
+  const triggerAgentSpeech = async (speaker: AgentCharacter, topic?: string, contextOverride?: ChatMessage[]) => {
     if (isGeneratingRef.current) return;
     if (speaker.isUser && !aiTakeoverRef.current) {
       setUserTurnPending(speaker);
@@ -343,7 +394,7 @@ export const App: React.FC = () => {
         llmConfig,
         speaker.role,
         speaker.name,
-        chatMessages,
+        contextOverride ?? chatMessages,
         topic,
         buildSceneData(topic)
       );
@@ -414,7 +465,7 @@ export const App: React.FC = () => {
     }
   };
 
-  const advanceConversation = (speakerId: string, speakerText: string) => {
+  const advanceConversation = (speakerId: string, speakerText: string, contextOverride?: ChatMessage[]) => {
     const loopCfg = getGameLoopConfig();
     const maxRounds = loopCfg.maxDialogueRounds ?? 0;
     if (maxRounds > 0 && dialogueRoundCount.current >= maxRounds) {
@@ -432,7 +483,7 @@ export const App: React.FC = () => {
     if (nominee && nominee.id !== speakerId) {
       if (nominee.isUser) {
         if (aiTakeoverRef.current) {
-          triggerAgentSpeech(nominee, topic);
+          triggerAgentSpeech(nominee, topic, contextOverride);
           return;
         }
         setActiveDialogue(null);
@@ -441,7 +492,7 @@ export const App: React.FC = () => {
         userTurnPendingRef.current = true;
         return;
       }
-      triggerAgentSpeech(nominee, topic);
+      triggerAgentSpeech(nominee, topic, contextOverride);
       return;
     }
 
@@ -454,7 +505,7 @@ export const App: React.FC = () => {
         userTurnPendingRef.current = true;
         return;
       }
-      triggerAgentSpeech(nextSpeaker, topic);
+      triggerAgentSpeech(nextSpeaker, topic, contextOverride);
     }
   };
 
@@ -487,7 +538,51 @@ export const App: React.FC = () => {
     userTurnPendingRef.current = false;
     soundManager.playTextBleep(600);
 
-    advanceConversation(userTurnPending.id, trimmed);
+    advanceConversation(userTurnPending.id, trimmed, [...chatMessages, newMsg]);
+  };
+
+  // 7b. 隨時插話：以指定 agent 身份發言，再交棒給 AI 接話
+  const handleInterject = (speakerId: string, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const agent = agents.find(a => a.id === speakerId);
+    if (!agent) return;
+
+    // 若插話者正好有待回應的使用者回合，先清掉避免狀態打架
+    if (userTurnPending && userTurnPending.id === speakerId) {
+      setUserTurnPending(null);
+      userTurnPendingRef.current = false;
+    }
+
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const newMsg: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      speakerId: agent.id,
+      speakerName: agent.name,
+      speakerRole: agent.role,
+      text: trimmed,
+      timestamp: timeStr,
+      isMeeting: meetingState.isActive
+    };
+
+    setAgents(prev =>
+      prev.map(a =>
+        a.id === agent.id
+          ? { ...a, speechBubble: trimmed, speechTimer: 4, direction: 'down' }
+          : a
+      )
+    );
+
+    setChatMessages(prev => [...prev, newMsg]);
+    setActiveDialogue(newMsg);
+    activeDialogueRef.current = true;
+    soundManager.playTextBleep(600);
+
+    // AI 空閒時直接接話（帶上剛送出的插話，避開閉包舊陣列）
+    // 若 AI 正在生成則只貼出訊息，由使用者按下一步推進
+    if (!isGeneratingRef.current) {
+      advanceConversation(agent.id, trimmed, [...chatMessages, newMsg]);
+    }
   };
 
   // 4. 召開全體會議 (Call Meeting)
@@ -643,11 +738,22 @@ export const App: React.FC = () => {
         onDispatchTask={handleDispatchTask}
         onTriggerRandomEvent={handleTriggerRandomEvent}
         onToggleChatLog={() => setIsChatLogOpen(prev => !prev)}
+        onInterject={handleInterject}
+        interjectSpeakers={agents.map(a => ({ id: a.id, name: a.name, role: a.role, isUser: a.isUser === true }))}
+        canInterject={agents.length > 0 && !userTurnPending && !isBusyGenerating && !roundsExhausted}
+        isPaused={isPaused}
+        onTogglePause={() => {
+          const newState = !isPaused;
+          setIsPaused(newState);
+          isPausedRef.current = newState;
+        }}
         onResetSetup={() => {
               setActiveDialogue(null);
               activeDialogueRef.current = false;
               setUserTurnPending(null);
               userTurnPendingRef.current = false;
+              setIsPaused(false);
+              isPausedRef.current = false;
               setIsChatLogOpen(false);
               setChatMessages([]);
               if (meetingState.isActive) {
@@ -686,6 +792,7 @@ export const App: React.FC = () => {
         onUserReply={handleUserReply}
         isBusy={isBusyGenerating}
         aiTakeover={aiTakeover}
+        isPaused={isPaused}
         onToggleAiTakeover={() => {
           const newState = !aiTakeover;
           setAiTakeover(newState);
