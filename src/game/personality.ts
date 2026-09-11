@@ -23,7 +23,6 @@ const ROLE_TRAIT_BIASES: Record<string, Partial<PersonalityTraits>> = {
   UIUX:  { sociability: 0.55, diligence: 0.70, curiosity: 0.80, caffeineAddiction: 0.60, stressTolerance: 0.40, expressiveness: 0.70, humorLevel: 0.48 },
   AD:    { sociability: 0.60, diligence: 0.55, curiosity: 0.85, caffeineAddiction: 0.45, stressTolerance: 0.50, expressiveness: 0.88, humorLevel: 0.62 },
   INTERN:{ sociability: 0.65, diligence: 0.88, curiosity: 0.75, caffeineAddiction: 0.30, stressTolerance: 0.20, expressiveness: 0.55, humorLevel: 0.55 },
-  DAVIS: { sociability: 0.42, diligence: 0.80, curiosity: 0.68, caffeineAddiction: 0.58, stressTolerance: 0.60, expressiveness: 0.40, humorLevel: 0.30 },
 };
 
 // 動態角色無專屬特質時的通用基準

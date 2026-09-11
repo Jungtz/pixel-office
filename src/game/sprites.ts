@@ -100,11 +100,6 @@ export function drawCharacterSprite(
         ctx.lineWidth = 1.5;
         ctx.strokeRect(10, eyeY - 1, 4, 4);
         ctx.strokeRect(18, eyeY - 1, 4, 4);
-      } else if (role === 'DAVIS') {
-        ctx.strokeStyle = '#22d3ee';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(10, eyeY - 1, 4, 4);
-        ctx.strokeRect(18, eyeY - 1, 4, 4);
       }
     } else if (direction === 'left') {
       ctx.fillRect(10, eyeY, 2, 3);

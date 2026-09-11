@@ -129,22 +129,6 @@ const POOL: Partial<Record<string, Record<BubbleContext, string[]>>> = {
     tired:          ['創業真的很累', '但值得', '休息是為了走更遠'],
     random:         ['顛覆業界！', 'AI 是未來', '年終翻倍不是夢'],
   },
-  DAVIS: {
-    greeting:       ['早，先看數據', '大家早，今日 KPI 如何？', '早安'],
-    coffee_run:     ['資料處理需要咖啡因', '補充咖啡再跑報表', '去泡咖啡'],
-    stressed_out:   ['樣本數不足啊…', '這份報表又跑掛了', '資料管道延遲了'],
-    happy_moment:   ['轉換率提升了！', '模型預測準確度破 9 成', '這個趨勢很漂亮'],
-    working_hard:   ['跑 SQL 中…', '分析資料趨勢', '寫分析報告'],
-    bored_at_desk:  ['等資料匯出…', '看看 dashboard', '數據還是沒更新'],
-    boss_sighting:  ['（打開 KPI 報表）', '（專心看圖表）', '老闆！'],
-    meeting_dread:  ['又是直覺會議…', '沒數據的討論', '又要開會'],
-    snack_time:     ['補充糖分', '下午茶時間', '吃點東西'],
-    leaving_desk:   ['去白板畫趨勢圖', '整理資料', '離開一下'],
-    returning_desk: ['回來看報表', '繼續分析', '回座位'],
-    chatting:       ['數據會說話', '這需要驗證', '趨勢顯示如此'],
-    tired:          ['眼睛被 Excel 佔據了', '需要休息', '數據看太多'],
-    random:         ['Correlation ≠ Causation', '先做 A/B Test', '資料才是最誠實的'],
-  },
 };
 
 // 未定義專屬小氣泡池的動態角色使用通用池

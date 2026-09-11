@@ -3,7 +3,7 @@ import { RoleConfig } from '../game/types';
 /**
  * 動態角色載入器：
  * 掃描 src/prompts/*.md（scene.md 除外），每個檔案即是一個角色。
- * 檔名（去除 .md 並大寫化）為角色 id，例如 davis.md → DAVIS，
+ * 檔名（去除 .md 並大寫化）為角色 id，例如 qa.md → QA，
  * 後端 loadRolePrompt 亦依此規則讀取同一份 md。
  *
  * 檔案格式：可選 YAML frontmatter（--- 包夾）定義角色 metadata，
