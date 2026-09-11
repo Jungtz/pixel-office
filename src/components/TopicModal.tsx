@@ -21,8 +21,9 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   const [isRolling, setIsRolling] = useState<boolean>(false);
 
   useEffect(() => {
+    // 手動模式：開啟時僅預填本地範例，不自動呼叫 AI，等待使用者按骰子或自行輸入
     if (isOpen && !topic) {
-      handleRollTopic();
+      setTopic(generateMockTopic());
     }
   }, [isOpen]);
 
@@ -124,7 +125,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
               本次辦公室冒險主題
             </h1>
             <p className="text-slate-400 text-xs mt-1 font-mono">
-              AI 已根據團隊情境生成任務目標，您可以點擊右側骰子 🎲 重新發想或直接修改內文。
+              請手動輸入主題，或點擊右側骰子 🎲 由 AI 發想，亦可直接修改內文。
             </p>
           </div>
 

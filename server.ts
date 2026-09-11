@@ -330,7 +330,8 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           body: JSON.stringify({
             model: activeModel || 'gpt-3.5-turbo',
             messages: messagesPayload,
-            max_tokens: 150,
+            // 推理模型會先耗用 token 做思考，150 會導致 content 為空 (finish_reason=length)，故放寬至 1000
+            max_tokens: 1000,
             temperature: 0.8
           }),
           signal: controller.signal
@@ -348,7 +349,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       data = JSON.parse(resText);
     } catch (e) {}
 
-    const text = data.message?.content || data.choices?.[0]?.message?.content;
+    const rawContent = data.message?.content ?? data.choices?.[0]?.message?.content;
+    const text = Array.isArray(rawContent)
+      ? rawContent.map((p: any) => (typeof p === 'string' ? p : p?.text ?? '')).join('')
+      : rawContent;
     if (text && typeof text === 'string') {
       const cleanResult = text
         .replace(/^(\[\w+\]\s*)+/g, '')          // 剝掉 [AD_1] [AD_1] 類前綴
@@ -364,8 +368,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       }
       return res.json({ status: 'success', text: cleanResult });
     } else {
-      console.warn(`[LLM Warning]: API 尚未回傳有效文字或包含錯誤內容。`);
-      console.warn(`[Raw Data]   : ${resText.substring(0, 250)}`);
+      const finishReason = data.choices?.[0]?.finish_reason ?? 'unknown';
+      console.warn(`[LLM Warning]: API 尚未回傳有效文字或包含錯誤內容。(finish_reason=${finishReason})`);
+      console.warn(`[Raw Data]   : ${resText.substring(0, 500)}`);
       console.log('=========================================================\n');
     }
 
