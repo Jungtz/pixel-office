@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, RoleType } from '../game/types';
 import { ROLE_CONFIGS } from '../services/roles';
 import { soundManager } from '../services/sound';
-import { X, Trash2, Download, History, Search, Filter } from 'lucide-react';
+import { X, Trash2, Download, History, Search, Filter, FolderOpen } from 'lucide-react';
 
 interface ChatLogProps {
   isOpen: boolean;
   onClose: () => void;
   messages: ChatMessage[];
   onClear: () => void;
+  onLoadHistory?: () => void;
 }
 
 const ROLE_SHORT_CODES: Record<string, string> = {
@@ -25,7 +26,8 @@ export const ChatLog: React.FC<ChatLogProps> = ({
   isOpen,
   onClose,
   messages,
-  onClear
+  onClear,
+  onLoadHistory
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('ALL');
@@ -170,17 +172,32 @@ export const ChatLog: React.FC<ChatLogProps> = ({
       </div>
 
       {/* Footer Controls */}
-      <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-2">
-        <button
-          onClick={() => {
-            soundManager.playSelectSound();
-            onClear();
-          }}
-          disabled={messages.length === 0}
-          className="px-3 py-1.5 text-xs font-mono text-rose-400 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 hover:border-rose-600 rounded flex items-center gap-1 disabled:opacity-40 transition"
-        >
-          <Trash2 className="w-3.5 h-3.5" /> 清空紀錄
-        </button>
+      <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              soundManager.playSelectSound();
+              onClear();
+            }}
+            disabled={messages.length === 0}
+            className="px-3 py-1.5 text-xs font-mono text-rose-400 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 hover:border-rose-600 rounded flex items-center gap-1 disabled:opacity-40 transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> 清空紀錄
+          </button>
+
+          {onLoadHistory && (
+            <button
+              onClick={() => {
+                soundManager.playSelectSound();
+                onLoadHistory();
+              }}
+              className="px-3 py-1.5 text-xs font-mono text-amber-400 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/60 hover:border-amber-600 rounded flex items-center gap-1 transition"
+              title="從歷史紀錄備份並接續討論"
+            >
+              <FolderOpen className="w-3.5 h-3.5" /> 讀取歷史
+            </button>
+          )}
+        </div>
 
         <button
           onClick={exportLogs}

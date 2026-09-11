@@ -12,7 +12,8 @@ import {
   Zap,
   Coffee,
   AlertTriangle,
-  History
+  History,
+  FolderOpen
 } from 'lucide-react';
 
 interface ControlPanelProps {
@@ -20,6 +21,7 @@ interface ControlPanelProps {
   onDispatchTask: (task: string) => void;
   onTriggerRandomEvent: () => void;
   onToggleChatLog: () => void;
+  onLoadHistory: () => void;
   onResetSetup: () => void;
   onInterject: (speakerId: string, text: string) => void;
   interjectSpeakers: { id: string; name: string; role: string; isUser: boolean }[];
@@ -36,6 +38,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   onDispatchTask,
   onTriggerRandomEvent,
   onToggleChatLog,
+  onLoadHistory,
   onResetSetup,
   onInterject,
   interjectSpeakers,
@@ -146,7 +149,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/60 rounded text-amber-300 text-xs font-mono font-bold flex items-center gap-1.5 transition"
               >
                 <Users className="w-3.5 h-3.5" />
-                召開全體會議
+                開會
               </button>
 
               {/* Broadcast Task Button */}
@@ -158,7 +161,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/60 rounded text-sky-300 text-xs font-mono font-bold flex items-center gap-1.5 transition"
               >
                 <Zap className="w-3.5 h-3.5" />
-                派發需求/任務
+                任務
               </button>
 
               {/* Interject Button */}
@@ -169,7 +172,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/60 rounded text-emerald-300 text-xs font-mono font-bold flex items-center gap-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                插話討論
+                插話
               </button>
 
               {/* Trigger Random Event */}
@@ -181,7 +184,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/60 rounded text-purple-300 text-xs font-mono font-bold flex items-center gap-1.5 transition"
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-purple-400" />
-                隨機爆發事件
+                事件
               </button>
 
               {/* Pause / Resume Button */}
@@ -202,6 +205,20 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 {isPaused ? '繼續' : '暫停'}
               </button>
 
+              {/* Load History Button */}
+              <button
+                onClick={() => {
+                  soundManager.playSelectSound();
+                  onLoadHistory();
+                }}
+                disabled={agentCount === 0}
+                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/60 rounded text-slate-200 text-xs font-mono font-bold flex items-center gap-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                title="從歷史紀錄備份並接續討論（將取代當前對話）"
+              >
+                <FolderOpen className="w-4 h-4 text-amber-400" />
+                讀取
+              </button>
+
               {/* Chat Log Drawer Button */}
               <button
                 onClick={() => {
@@ -212,7 +229,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 title="查看對話與事件歷史"
               >
                 <History className="w-4 h-4 text-amber-400" />
-                歷史紀錄
+                歷史
                 {chatMessagesCount > 0 && (
                   <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded-full text-[10px] font-bold font-mono">
                     {chatMessagesCount}

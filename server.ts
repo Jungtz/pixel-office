@@ -183,7 +183,7 @@ app.post('/api/test-key', async (req: Request, res: Response) => {
 
     const baseUrl = (provider.baseURL || (provider.sdk === 'ollama' ? 'https://ollama.com' : 'https://api.openai.com/v1')).replace(/\/$/, '');
     const endpoint = provider.sdk === 'ollama' ? `${baseUrl}/api/chat` : `${baseUrl}/chat/completions`;
-    const model = provider.defaultModel || (provider.sdk === 'ollama' ? 'gemma4:31b-cloud' : 'gpt-3.5-turbo');
+    const model = provider.defaultModel || (provider.sdk === 'ollama' ? 'gemma4:31b' : 'gpt-3.5-turbo');
 
     const messagesPayload = [
       { role: 'user', content: 'ping' }
@@ -227,7 +227,7 @@ app.post('/api/test-key', async (req: Request, res: Response) => {
  */
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
-    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData, model: requestedModel, apiKey: frontendApiKey } = req.body;
+    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData, model: requestedModel, apiKey: frontendApiKey, historySummary } = req.body;
     const config = loadConfig();
     const provider = config.providers?.[providerId];
     const activeModel = requestedModel || provider?.defaultModel || '';
@@ -265,7 +265,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         topicLine = `當前討論主題：「${topic}」\n`;
       }
 
-      systemPrompt = `${basePrompt}\n\n${topicLine}${sceneBlock}\n\n【重要】你現在的名字是 ${speakerName}。你的發言必須緊扣當前討論主題，結構如下：先亮明你對主題的立場（贊成／反對／補充），再用你的專業提出具體理由（數據、案例或親身經驗），二到四句話，展現角色性格。若上一人的發言偏離主題，不要跟著歪樓，先把話題拉回主題再回應。若需點名請使用實際成員名稱（${memberNamesStr}），不要自己編造不存在的人名。你的回覆中絕對不要包含你自己的名字或任何前綴（例如「BOSS_1 (BOSS):」），直接輸出純對話內容，一律使用繁體中文。`;
+      // 接續歷史討論：把前情摘要注入 system prompt，實際對話只帶最近 N 則
+      const summaryBlock = (typeof historySummary === 'string' && historySummary.trim())
+        ? `【前情提要（接續歷史討論）】\n${historySummary.trim().slice(0, 2000)}\n請基於以上前情繼續討論，不要重複已達成的結論。\n\n`
+        : '';
+
+      systemPrompt = `${basePrompt}\n\n${summaryBlock}${topicLine}${sceneBlock}\n\n【重要】你現在的名字是 ${speakerName}。你的發言必須緊扣當前討論主題，結構如下：先亮明你對主題的立場（贊成／反對／補充），再用你的專業提出具體理由（數據、案例或親身經驗），二到四句話，展現角色性格。若上一人的發言偏離主題，不要跟著歪樓，先把話題拉回主題再回應。若需點名請使用實際成員名稱（${memberNamesStr}），不要自己編造不存在的人名。你的回覆中絕對不要包含你自己的名字或任何前綴（例如「BOSS_1 (BOSS):」），直接輸出純對話內容，一律使用繁體中文。`;
       console.log(`[SceneCtx] : ${sceneData ? `已載入 (${sceneData.totalPeople}人, ${sceneData.time})` : '無場景資訊'}`);
       messagesPayload = [
         { role: 'system', content: systemPrompt },
@@ -407,27 +412,39 @@ function sanitizeFilename(topic: string): string {
 /**
  * POST /api/chat-log - 接收前端對話紀錄並存成 Markdown 檔 (chat-logs/)
  * 檔名由後端依 sessionId + 主題產生，前端只傳資料不指定檔名。
+ * 接續歷史時傳 resumeFrom（舊檔名）：先由前端呼叫 /api/chat-logs/backup 備份，
+ * 後端直接複寫同一檔並寫入前情提要區塊。
  */
 app.post('/api/chat-log', (req: Request, res: Response) => {
   try {
-    const { sessionId, topic, startedAt, messages } = req.body || {};
+    const { sessionId, topic, startedAt, messages, resumeFrom, historySummary } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.json({ status: 'skipped', reason: 'empty messages' });
     }
 
-    const stamp = typeof sessionId === 'string' && /^\d{8}-\d{6}$/.test(sessionId)
-      ? sessionId
-      : formatSessionStamp(new Date());
-    const slug = sanitizeFilename(typeof topic === 'string' ? topic : '');
     const dir = path.join(process.cwd(), 'chat-logs');
     fs.mkdirSync(dir, { recursive: true });
-    const filename = `${stamp}-${slug}.md`;
 
-    // 同一 session 換主題會產生新檔名，刪掉同 stamp 的舊檔，確保單 session 單檔
-    // stamp 已嚴格驗證為 \d{8}-\d{6} 格式，前綴比對不會波及其他檔案
-    for (const f of fs.readdirSync(dir)) {
-      if (f.startsWith(`${stamp}-`) && f.endsWith('.md') && f !== filename) {
-        try { fs.unlinkSync(path.join(dir, f)); } catch {}
+    const summaryText = (typeof historySummary === 'string' ? historySummary : '').trim().slice(0, 2000);
+    const resumed = isSafeChatLogFilename(resumeFrom) && fs.existsSync(path.join(dir, resumeFrom));
+
+    let filename: string;
+    if (resumed) {
+      // 接續模式：複寫同一檔，不刪檔
+      filename = resumeFrom as string;
+    } else {
+      const stamp = typeof sessionId === 'string' && /^\d{8}-\d{6}$/.test(sessionId)
+        ? sessionId
+        : formatSessionStamp(new Date());
+      const slug = sanitizeFilename(typeof topic === 'string' ? topic : '');
+      filename = `${stamp}-${slug}.md`;
+
+      // 同一 session 換主題會產生新檔名，刪掉同 stamp 的舊檔，確保單 session 單檔
+      // stamp 已嚴格驗證為 \d{8}-\d{6} 格式，前綴比對不會波及其他檔案
+      for (const f of fs.readdirSync(dir)) {
+        if (f.startsWith(`${stamp}-`) && f.endsWith('.md') && f !== filename) {
+          try { fs.unlinkSync(path.join(dir, f)); } catch {}
+        }
       }
     }
 
@@ -446,7 +463,9 @@ app.post('/api/chat-log', (req: Request, res: Response) => {
       `- 開始時間：${typeof startedAt === 'string' ? startedAt : ''}`,
       `- 最後更新：${new Date().toLocaleString('zh-TW')}`,
       `- 則數：${lines.length}`,
+      ...(resumed ? ['- 接續：是（舊檔已備份至 backup/）'] : []),
       '',
+      ...(summaryText ? ['## 前情提要', '', summaryText, ''] : []),
       '## 對話',
       '',
       ...lines,
@@ -458,6 +477,179 @@ app.post('/api/chat-log', (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Save chat log failed:', err.message);
     return res.json({ status: 'error', error: err.message });
+  }
+});
+
+/**
+ * 接續討論用檔名白名單：必須是後端產生的 `{stamp}-{主題}.md` 格式，
+ * 且不含路徑分隔符，避免路徑穿越。
+ */
+function isSafeChatLogFilename(name: unknown): name is string {
+  return typeof name === 'string'
+    && /^\d{8}-\d{6}-.+\.md$/.test(name)
+    && !name.includes('/')
+    && !name.includes('\\')
+    && !name.includes('..');
+}
+
+/**
+ * GET /api/chat-logs - 列出 chat-logs/*.md（不含 backup/），供接續討論挑檔
+ */
+app.get('/api/chat-logs', (req: Request, res: Response) => {
+  try {
+    const dir = path.join(process.cwd(), 'chat-logs');
+    if (!fs.existsSync(dir)) return res.json({ status: 'ok', logs: [] });
+    const logs = fs.readdirSync(dir)
+      .filter(f => f.endsWith('.md') && isSafeChatLogFilename(f))
+      .map(f => {
+        try {
+          const full = path.join(dir, f);
+          const stat = fs.statSync(full);
+          const content = fs.readFileSync(full, 'utf-8');
+          return {
+            filename: f,
+            topic: content.match(/^-\s*主題：(.*)$/m)?.[1]?.trim() || f,
+            startedAt: content.match(/^-\s*開始時間：(.*)$/m)?.[1]?.trim() || '',
+            lastUpdated: content.match(/^-\s*最後更新：(.*)$/m)?.[1]?.trim() || '',
+            count: Number(content.match(/^-\s*則數：(\d+)\s*$/m)?.[1] || '0'),
+            mtime: stat.mtimeMs
+          };
+        } catch { return null; }
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, 100);
+    return res.json({ status: 'ok', logs });
+  } catch (err: any) {
+    return res.json({ status: 'error', error: err.message });
+  }
+});
+
+/**
+ * GET /api/chat-log?file=xxx - 讀取單一歷史檔並解析訊息，供接續討論還原
+ */
+app.get('/api/chat-log', (req: Request, res: Response) => {
+  try {
+    const file = req.query.file;
+    if (!isSafeChatLogFilename(file)) {
+      return res.json({ status: 'error', error: '檔名不合法' });
+    }
+    const full = path.join(process.cwd(), 'chat-logs', file);
+    if (!fs.existsSync(full)) {
+      return res.json({ status: 'error', error: '找不到檔案' });
+    }
+    const content = fs.readFileSync(full, 'utf-8');
+    const topic = content.match(/^-\s*主題：(.*)$/m)?.[1]?.trim() || '';
+    const startedAt = content.match(/^-\s*開始時間：(.*)$/m)?.[1]?.trim() || '';
+    const messages: { timestamp: string; speakerName: string; speakerRole: string; text: string }[] = [];
+    const re = /^-\s*\[(.*?)\]\s*\*\*(.*?)\*\*\s*\((.*?)\)：(.*)$/gm;
+    let m: RegExpExecArray | null;
+    let guard = 0;
+    while ((m = re.exec(content)) !== null && guard++ < 5000) {
+      messages.push({
+        timestamp: m[1].trim(),
+        speakerName: m[2].trim(),
+        speakerRole: m[3].trim().toUpperCase(),
+        text: m[4].trim()
+      });
+    }
+    return res.json({ status: 'ok', filename: file, topic, startedAt, messages });
+  } catch (err: any) {
+    return res.json({ status: 'error', error: err.message });
+  }
+});
+
+/**
+ * POST /api/chat-logs/backup - 接續前先備份舊檔到 chat-logs/backup/（一次一個備份）
+ */
+app.post('/api/chat-logs/backup', (req: Request, res: Response) => {
+  try {
+    const { file } = req.body || {};
+    if (!isSafeChatLogFilename(file)) {
+      return res.json({ status: 'error', error: '檔名不合法' });
+    }
+    const dir = path.join(process.cwd(), 'chat-logs');
+    const src = path.join(dir, file);
+    if (!fs.existsSync(src)) {
+      return res.json({ status: 'skipped', reason: 'file not found' });
+    }
+    const backupDir = path.join(dir, 'backup');
+    fs.mkdirSync(backupDir, { recursive: true });
+    const backupFile = `backup/${file.replace(/\.md$/, '')}.bak-${formatSessionStamp(new Date())}.md`;
+    fs.copyFileSync(src, path.join(dir, backupFile));
+    return res.json({ status: 'backed-up', backupFile });
+  } catch (err: any) {
+    return res.json({ status: 'error', error: err.message });
+  }
+});
+
+/**
+ * POST /api/chat-logs/summary - 把歷史訊息濃縮成前情提要（接續時注入 LLM）
+ */
+app.post('/api/chat-logs/summary', async (req: Request, res: Response) => {
+  try {
+    const { providerId, model: requestedModel, apiKey: frontendApiKey, topic, messages } = req.body || {};
+    const list: { speakerName?: string; text?: string }[] = Array.isArray(messages) ? messages.slice(-100) : [];
+    if (list.length === 0) {
+      return res.json({ status: 'mock', summary: '（無歷史訊息）' });
+    }
+
+    const transcript = list
+      .map(m => `[${m.speakerName || '?'}] ${String(m.text || '').slice(0, 300)}`)
+      .join('\n')
+      .slice(0, 12000);
+
+    const config = loadConfig();
+    const provider = config.providers?.[providerId];
+    const effectiveApiKey = provider?.apiKey || frontendApiKey || '';
+    const activeModel = requestedModel || provider?.defaultModel || '';
+
+    if (!provider || providerId === 'mock' || !effectiveApiKey) {
+      const head = list.slice(0, 2).map(m => `[${m.speakerName}] ${String(m.text || '').slice(0, 120)}`).join('；');
+      const tail = list.slice(-3).map(m => `[${m.speakerName}] ${String(m.text || '').slice(0, 120)}`).join('；');
+      return res.json({
+        status: 'mock',
+        summary: `主題「${topic || '未定'}」共 ${list.length} 則。開場：${head}。近況：${tail}。`
+      });
+    }
+
+    const baseUrl = (provider.baseURL || (provider.sdk === 'ollama' ? 'https://ollama.com' : 'https://api.openai.com/v1')).replace(/\/$/, '');
+    const endpoint = provider.sdk === 'ollama' ? `${baseUrl}/api/chat` : `${baseUrl}/chat/completions`;
+    const payloadMessages = [
+      { role: 'system', content: '你是會議紀錄助手。請用繁體中文將以下辦公室討論濃縮成 300 字內的前情提要：列出主題、已達成的共識（2-4 點）、未決事項（1-3 點）。直接輸出提要，不要寒暄。' },
+      { role: 'user', content: `主題：${topic || '未定'}\n\n${transcript}` }
+    ];
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${effectiveApiKey}`
+        },
+        body: JSON.stringify(
+          provider.sdk === 'ollama'
+            ? { model: activeModel || 'gemma4:31b-cloud', messages: payloadMessages, stream: false }
+            : { model: activeModel || 'gpt-3.5-turbo', messages: payloadMessages, max_tokens: 500, temperature: 0.3 }
+        ),
+        signal: controller.signal
+      });
+      const data = await response.json().catch(() => ({}));
+      const raw = data.message?.content ?? data.choices?.[0]?.message?.content;
+      const text = Array.isArray(raw)
+        ? raw.map((p: any) => (typeof p === 'string' ? p : p?.text ?? '')).join('')
+        : raw;
+      if (text && typeof text === 'string' && text.trim()) {
+        return res.json({ status: 'success', summary: text.trim().slice(0, 2000) });
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    return res.json({ status: 'mock', summary: '摘要產生失敗，將僅使用最近訊息接續。' });
+  } catch (err: any) {
+    return res.json({ status: 'mock', summary: '摘要產生失敗，將僅使用最近訊息接續。' });
   }
 });
 

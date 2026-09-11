@@ -3,7 +3,7 @@ import { RoleType } from '../game/types';
 import { ROLE_CONFIGS } from '../services/roles';
 import { soundManager } from '../services/sound';
 import { getProviderList, getProviderById, resolveModel, initModelConfig } from '../services/configService';
-import { Users, Sparkles, Play, ShieldAlert, Key, Cpu, Globe } from 'lucide-react';
+import { Users, Sparkles, Play, ShieldAlert, Key, Cpu, Globe, History } from 'lucide-react';
 
 export interface RoleSetupConfig {
   counts: Record<string, number>;
@@ -17,9 +17,16 @@ export interface RoleSetupConfig {
   userName?: string;
 }
 
+export interface ResumeLlmConfig {
+  provider: string;
+  apiKey?: string;
+  model?: string;
+}
+
 interface SetupModalProps {
   isOpen: boolean;
   onStart: (config: RoleSetupConfig) => void;
+  onOpenResume: (llm: ResumeLlmConfig) => void;
 }
 
 const getShortCode = (roleId: string): string => roleId.slice(0, 2);
@@ -51,7 +58,7 @@ const loadSavedProvider = (): string | null => {
   return null;
 };
 
-export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
+export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart, onOpenResume }) => {
   const [counts, setCounts] = useState<Record<string, number>>(loadSavedCounts);
 
   const providers = getProviderList();
@@ -459,13 +466,30 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart }) => {
                   總入場人數：<span className="text-amber-300 font-bold">{totalMembers}</span> 人
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={totalMembers === 0 || apiKeyMissing || keyNotVerified}
-                  className="px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold font-mono text-sm rounded border border-amber-500 shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Play className="w-4 h-4 fill-slate-950" /> 開啟辦公室冒險！
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundManager.playSelectSound();
+                      onOpenResume({
+                        provider: selectedProviderId,
+                        apiKey: userApiKey || apiKey,
+                        model
+                      });
+                    }}
+                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-300 font-mono text-sm rounded border border-slate-700 hover:border-amber-500/50 transition flex items-center gap-2"
+                    title="從 chat-logs 歷史紀錄備份並接續討論"
+                  >
+                    <History className="w-4 h-4" /> 接續歷史討論
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={totalMembers === 0 || apiKeyMissing || keyNotVerified}
+                    className="px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold font-mono text-sm rounded border border-amber-500 shadow-lg transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Play className="w-4 h-4 fill-slate-950" /> 開啟辦公室冒險！
+                  </button>
+                </div>
               </div>
             </div>
 

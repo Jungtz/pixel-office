@@ -13,9 +13,11 @@ import { generatePersonality } from './game/personality';
 import { OfficeCanvas } from './components/OfficeCanvas';
 import { ControlPanel } from './components/ControlPanel';
 import { DialogueBox } from './components/DialogueBox';
-import { SetupModal, RoleSetupConfig } from './components/SetupModal';
+import { SetupModal, RoleSetupConfig, ResumeLlmConfig } from './components/SetupModal';
 import { TopicModal } from './components/TopicModal';
 import { ChatLog } from './components/ChatLog';
+import { ResumeModal } from './components/ResumeModal';
+import { backupChatLog, distinctSpeakers, parseStamp, type ResumedSession } from './services/chatLogService';
 
 export const App: React.FC = () => {
   const [map] = useState(() => createDefaultMap());
@@ -29,6 +31,10 @@ export const App: React.FC = () => {
   const [isTopicOpen, setIsTopicOpen] = useState(false);
   const [pendingConfig, setPendingConfig] = useState<RoleSetupConfig | null>(null);
   const [isChatLogOpen, setIsChatLogOpen] = useState(false);
+  const [isResumeOpen, setIsResumeOpen] = useState(false);
+  const [resumeFromSetup, setResumeFromSetup] = useState(false);
+  const [resumeLlm, setResumeLlm] = useState<LLMConfig>({ provider: 'mock' });
+  const [historySummary, setHistorySummary] = useState<string>('');
   const [meetingState, setMeetingState] = useState<MeetingState>({
     isActive: false,
     topic: '',
@@ -63,6 +69,10 @@ export const App: React.FC = () => {
   const dialogueRoundCount = useRef<number>(0);
   const sessionIdRef = useRef<string>('');
   const sessionStartedAtRef = useRef<string>('');
+  // 接續歷史：覆寫同一檔用的檔名（null = 新開 session 照 stamp+主題命名）
+  const sessionFileRef = useRef<string | null>(null);
+  // 前情提要用 ref 同步一份，避免接續當下閉包拿到舊 state
+  const historySummaryRef = useRef<string>('');
   const isGeneratingRef = useRef<boolean>(false);
   const activeDialogueRef = useRef<boolean>(false);
   const userTurnPendingRef = useRef<boolean>(false);
@@ -93,7 +103,10 @@ export const App: React.FC = () => {
         speakerName: m.speakerName,
         speakerRole: m.speakerRole,
         text: m.text
-      }))
+      })),
+      // 接續模式：覆寫同一檔（後端不刪檔）；新開模式則為 undefined 走 stamp+主題命名
+      resumeFrom: sessionFileRef.current || undefined,
+      historySummary: historySummary || undefined
     };
 
     const timer = setTimeout(() => {
@@ -105,7 +118,7 @@ export const App: React.FC = () => {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [chatMessages, currentTopic, meetingState.topic]);
+  }, [chatMessages, currentTopic, meetingState.topic, historySummary]);
 
   // 1. 第一階段：初始化團隊角色與 Provider，並開啟 TopicModal 選擇主題
   const handleStartSetup = (config: RoleSetupConfig) => {
@@ -127,11 +140,14 @@ export const App: React.FC = () => {
     if (!pendingConfig) return;
     setCurrentTopic(selectedTopic);
 
-    // 新冒險 = 新 log session（檔名時間戳）
+    // 新冒險 = 新 log session（檔名時間戳），清掉接續狀態
     const now = new Date();
     const p = (n: number) => String(n).padStart(2, '0');
     sessionIdRef.current = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
     sessionStartedAtRef.current = now.toLocaleString('zh-TW');
+    sessionFileRef.current = null;
+    historySummaryRef.current = '';
+    setHistorySummary('');
 
     const newAgents: AgentCharacter[] = [];
     let deskIdx = 0;
@@ -217,6 +233,144 @@ export const App: React.FC = () => {
       }
     }, 600);
 
+  };
+
+  // 2c. 接續歷史討論：先備份舊檔，再重建陣容並覆寫同一檔
+  const handleOpenResumeFromSetup = (llm: ResumeLlmConfig) => {
+    setResumeLlm({ provider: llm.provider, apiKey: llm.apiKey, model: llm.model });
+    setResumeFromSetup(true);
+    setIsResumeOpen(true);
+  };
+
+  const handleOpenResumeInGame = () => {
+    setResumeLlm(llmConfig);
+    setResumeFromSetup(false);
+    setIsResumeOpen(true);
+  };
+
+  const handleResumeConfirm = async (session: ResumedSession) => {
+    // 1. 先備份舊檔（失敗則中止，不覆寫）
+    try {
+      await backupChatLog(session.filename);
+    } catch (err) {
+      console.error('[Resume] 備份舊檔失敗，已中止接續:', err);
+      return;
+    }
+
+    const llm = resumeFromSetup ? resumeLlm : llmConfig;
+    if (resumeFromSetup) {
+      setLlmConfig({
+        provider: llm.provider,
+        apiKey: llm.apiKey,
+        model: llm.model
+      });
+    }
+
+    // 2. 沿用舊檔：sessionId 取檔名 stamp，之後自動存檔直接覆寫同一檔
+    const stamp = parseStamp(session.filename);
+    if (stamp) sessionIdRef.current = stamp;
+    sessionStartedAtRef.current = session.startedAt || new Date().toLocaleString('zh-TW');
+    sessionFileRef.current = session.filename;
+    historySummaryRef.current = session.summary || '';
+    setHistorySummary(session.summary || '');
+    setCurrentTopic(session.topic);
+
+    // 3. 依歷史發言者重建陣容（接續後全員由 AI 驅動）
+    const speakers = distinctSpeakers(session.messages);
+    const now = Date.now();
+    let deskIdx = 0;
+    const newAgents: AgentCharacter[] = speakers.map((s, idx) => {
+      const deskPos = s.role === 'BOSS'
+        ? OFFICE_LOCATIONS.bossDesk
+        : (OFFICE_LOCATIONS.desks[deskIdx % OFFICE_LOCATIONS.desks.length] || { x: 5, y: 5 });
+      if (s.role !== 'BOSS') deskIdx++;
+      return {
+        id: `${s.role}_${idx}_${now}`,
+        name: s.name,
+        role: s.role,
+        gridPos: { ...deskPos },
+        targetPos: null,
+        pixelPos: { x: deskPos.x * TILE_SIZE, y: deskPos.y * TILE_SIZE },
+        direction: 'down',
+        animFrame: 0,
+        status: 'working',
+        path: [],
+        speechBubble: null,
+        speechTimer: 0,
+        deskPos: { ...deskPos },
+        isUser: false,
+        stats: {
+          stress: Math.floor(Math.random() * 15 + 10),
+          coffeeLevel: Math.floor(Math.random() * 30 + 60),
+          workProgress: 0
+        },
+        needs: {
+          energy: Math.floor(Math.random() * 45 + 45),
+          caffeine: Math.floor(Math.random() * 50 + 35),
+          social: Math.floor(Math.random() * 50 + 25)
+        },
+        personality: generatePersonality(s.role, idx),
+        mood: 'neutral',
+        moodTimer: 0,
+        miniBubble: null,
+        miniBubbleTimer: 0,
+        lastMiniBubbleTime: 0,
+        activityStartTime: 0,
+        activityDuration: 0,
+        emojiBubble: null,
+        emojiTimer: 0,
+        actionTargetId: null,
+        lastRoleActionTime: now,
+        lastIdleActionTime: now,
+        eventMoveTarget: null,
+        eventMoveStatus: null,
+        eventChainId: null,
+        eventChainStep: 0
+      };
+    });
+
+    // 4. 歷史訊息灌回（speakerId 映射到新陣容 id）
+    const idByName = new Map(newAgents.map(a => [a.name, a.id]));
+    const restored: ChatMessage[] = session.messages.map((m, i) => ({
+      id: `resume_${now}_${i}`,
+      speakerId: idByName.get(m.speakerName) ?? `unknown_${i}`,
+      speakerName: m.speakerName,
+      speakerRole: m.speakerRole,
+      text: m.text,
+      timestamp: m.timestamp,
+      isMeeting: false
+    }));
+
+    setAgents(newAgents);
+    setChatMessages(restored);
+    setActiveDialogue(null);
+    activeDialogueRef.current = false;
+    setUserTurnPending(null);
+    userTurnPendingRef.current = false;
+    setMeetingState({ isActive: false, topic: '', participants: [], log: [], startTime: 0 });
+    dialogueRoundCount.current = 0;
+    setRoundsExhausted(false);
+    setIsPaused(false);
+    isPausedRef.current = false;
+    lastBehaviorTick.current = Date.now();
+    lastEventTime.current = Date.now();
+    inGameTimeRef.current = 9;
+    clearPendingChain();
+
+    setIsResumeOpen(false);
+    setIsSetupOpen(false);
+    setIsTopicOpen(false);
+
+    // 5. 自動接續：隨機一位成員基於歷史＋摘要接話
+    const snapshot = restored;
+    const topic = session.topic;
+    setTimeout(() => {
+      const cands = newAgents.filter(a => !a.isUser);
+      const speaker = cands[Math.floor(Math.random() * cands.length)] || newAgents[0];
+      if (speaker) {
+        triggerAgentSpeech(speaker, topic, snapshot, newAgents, llm);
+      }
+    }, 800);
   };
 
   // 3. 自動漫遊與對話循環 (Agent Autonomous Loop)
@@ -329,10 +483,11 @@ export const App: React.FC = () => {
     );
   };
 
-  const buildSceneData = (topic?: string) => {
+  const buildSceneData = (topic?: string, agentsOverride?: AgentCharacter[]) => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-    const totalPeople = agents.length;
+    const list = agentsOverride ?? agents;
+    const totalPeople = list.length;
     const loopCfg = getGameLoopConfig();
     const maxRounds = loopCfg.maxDialogueRounds || 0;
     const remaining = maxRounds > 0 ? Math.max(0, maxRounds - dialogueRoundCount.current) : -1;
@@ -369,7 +524,7 @@ export const App: React.FC = () => {
       return '（走動中）';
     };
 
-    const members = agents.map(a => {
+    const members = list.map(a => {
       const roleCfg = ROLE_CONFIGS[a.role];
       const userMark = a.isUser ? ' 👤' : '';
       const note = getLocationNote(a);
@@ -379,7 +534,13 @@ export const App: React.FC = () => {
     return { time: timeStr, totalPeople, members, topic, roundNumber: dialogueRoundCount.current + 1, maxRounds, remaining };
   };
 
-  const triggerAgentSpeech = async (speaker: AgentCharacter, topic?: string, contextOverride?: ChatMessage[]) => {
+  const triggerAgentSpeech = async (
+    speaker: AgentCharacter,
+    topic?: string,
+    contextOverride?: ChatMessage[],
+    agentsOverride?: AgentCharacter[],
+    llmOverride?: LLMConfig
+  ) => {
     if (isGeneratingRef.current) return;
     if (speaker.isUser && !aiTakeoverRef.current) {
       setUserTurnPending(speaker);
@@ -391,12 +552,13 @@ export const App: React.FC = () => {
 
     try {
       const text = await fetchLLMResponse(
-        llmConfig,
+        llmOverride ?? llmConfig,
         speaker.role,
         speaker.name,
         contextOverride ?? chatMessages,
         topic,
-        buildSceneData(topic)
+        buildSceneData(topic, agentsOverride),
+        historySummaryRef.current || undefined
       );
       dialogueRoundCount.current++;
 
@@ -738,6 +900,7 @@ export const App: React.FC = () => {
         onDispatchTask={handleDispatchTask}
         onTriggerRandomEvent={handleTriggerRandomEvent}
         onToggleChatLog={() => setIsChatLogOpen(prev => !prev)}
+        onLoadHistory={handleOpenResumeInGame}
         onInterject={handleInterject}
         interjectSpeakers={agents.map(a => ({ id: a.id, name: a.name, role: a.role, isUser: a.isUser === true }))}
         canInterject={agents.length > 0 && !userTurnPending && !isBusyGenerating && !roundsExhausted}
@@ -755,7 +918,11 @@ export const App: React.FC = () => {
               setIsPaused(false);
               isPausedRef.current = false;
               setIsChatLogOpen(false);
+              setIsResumeOpen(false);
               setChatMessages([]);
+              sessionFileRef.current = null;
+              historySummaryRef.current = '';
+              setHistorySummary('');
               if (meetingState.isActive) {
                 setMeetingState({ isActive: false, topic: '', participants: [], log: [], startTime: 0 });
               }
@@ -898,12 +1065,14 @@ export const App: React.FC = () => {
         onClose={() => setIsChatLogOpen(false)}
         messages={chatMessages}
         onClear={() => setChatMessages([])}
+        onLoadHistory={handleOpenResumeInGame}
       />
 
       {/* 第一階段：初始化團隊/角色彈窗 */}
       <SetupModal
         isOpen={isSetupOpen}
         onStart={handleStartSetup}
+        onOpenResume={handleOpenResumeFromSetup}
       />
 
       {/* 第二階段：AI 生成與骰子 🎲 重新發想主題彈窗 */}
@@ -915,6 +1084,15 @@ export const App: React.FC = () => {
           setIsTopicOpen(false);
           setIsSetupOpen(true);
         }}
+      />
+
+      {/* 接續歷史討論：SetupModal 與遊戲畫面共用 */}
+      <ResumeModal
+        isOpen={isResumeOpen}
+        llmConfig={resumeFromSetup ? resumeLlm : llmConfig}
+        inGame={!isSetupOpen}
+        onClose={() => setIsResumeOpen(false)}
+        onConfirm={handleResumeConfirm}
       />
 
 
