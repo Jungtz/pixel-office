@@ -594,6 +594,17 @@ export const App: React.FC = () => {
     const recentSpeakerIds = chatMessages.slice(-3).map(m => m.speakerId);
     const topicLower = topic.toLowerCase();
 
+    // 收尾階段：優先由 PM／BOSS 主持收斂，避免結論發散
+    const loopCfg = getGameLoopConfig();
+    const maxRounds = loopCfg.maxDialogueRounds ?? 0;
+    const remaining = maxRounds > 0 ? maxRounds - dialogueRoundCount.current : -1;
+    if (remaining > 0 && remaining <= 2) {
+      const host = otherAgents.find(a =>
+        (a.role === 'PM' || a.role === 'BOSS') && !recentSpeakerIds.includes(a.id)
+      );
+      if (host) return host;
+    }
+
     const scored = otherAgents.map(agent => {
       let score = 0;
 

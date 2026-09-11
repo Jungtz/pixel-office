@@ -88,7 +88,12 @@ function loadScenePrompt(data: SceneData): string {
     } else if (remaining <= data.totalPeople) {
       roundInfo = `\n\n⚠️ 對話進入收尾階段，僅剩 ${remaining} 輪！你必須針對主題做出個人結論或建議，不要再提出新問題或 @點名他人發起新話題。`;
     } else {
-      roundInfo = `\n（第 ${data.roundNumber} / ${data.maxRounds} 輪）`;
+      const progress = data.roundNumber / data.maxRounds;
+      if (progress <= 0.34) {
+        roundInfo = `\n（第 ${data.roundNumber} / ${data.maxRounds} 輪・開場表態期）先亮明你對主題的立場，再給一個核心理由。`;
+      } else {
+        roundInfo = `\n（第 ${data.roundNumber} / ${data.maxRounds} 輪・交叉辯論期）針對前面不同的意見反駁或補強，並引用對方的具體說法。若前面有人偏離主題，先把話題拉回主題。`;
+      }
     }
   }
 
@@ -260,7 +265,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         topicLine = `當前討論主題：「${topic}」\n`;
       }
 
-      systemPrompt = `${basePrompt}\n\n${topicLine}${sceneBlock}\n\n【重要】你現在的名字是 ${speakerName}。請直接針對對話紀錄中上一人的發言內容做出具體回應，不要離題自說自話，不要重述主題或角色設定。保持一到兩句話繁體中文，展現角色性格。若需點名請使用實際成員名稱（${memberNamesStr}），不要自己編造不存在的人名。你的回覆中絕對不要包含你自己的名字或任何前綴（例如「BOSS_1 (BOSS):」），直接輸出純對話內容。`;
+      systemPrompt = `${basePrompt}\n\n${topicLine}${sceneBlock}\n\n【重要】你現在的名字是 ${speakerName}。你的發言必須緊扣當前討論主題，結構如下：先亮明你對主題的立場（贊成／反對／補充），再用你的專業提出具體理由（數據、案例或親身經驗），二到四句話，展現角色性格。若上一人的發言偏離主題，不要跟著歪樓，先把話題拉回主題再回應。若需點名請使用實際成員名稱（${memberNamesStr}），不要自己編造不存在的人名。你的回覆中絕對不要包含你自己的名字或任何前綴（例如「BOSS_1 (BOSS):」），直接輸出純對話內容，一律使用繁體中文。`;
       console.log(`[SceneCtx] : ${sceneData ? `已載入 (${sceneData.totalPeople}人, ${sceneData.time})` : '無場景資訊'}`);
       messagesPayload = [
         { role: 'system', content: systemPrompt },
@@ -332,7 +337,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
             messages: messagesPayload,
             // 推理模型會先耗用 token 做思考，150 會導致 content 為空 (finish_reason=length)，故放寬至 1000
             max_tokens: 1000,
-            temperature: 0.8
+            temperature: 0.6
           }),
           signal: controller.signal
         });
