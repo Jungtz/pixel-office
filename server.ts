@@ -237,6 +237,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
     const isTopicGen = speakerRole === 'TOPIC' || speakerName === 'TopicGenerator';
 
+    // 結構化投票 action：vote（逐人表態）/ conclude（主持人定案）/ options（候選方案發想）
+    // 與一般對話不同：回傳 JSON，必須跳過下方的引號清除（見清理段 isStructuredVote 分支）
+    const voteAction = typeof req.body.action === 'string' ? req.body.action : '';
+    const isStructuredVote = voteAction === 'vote' || voteAction === 'conclude' || voteAction === 'options';
+
     if (!provider || providerId === 'mock' || !effectiveApiKey) {
       console.log(`[LLM Call] Mode: Mock AI | Type: ${isTopicGen ? '🎲 Topic Gen' : '💬 Dialogue'} | Speaker: ${speakerName}`);
       return res.json({ status: 'mock' });
@@ -261,6 +266,46 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: '請發想並輸出一個全新的辦公室專案討論主題。' }
       ];
+    } else if (isStructuredVote) {
+      const voteTopic = typeof req.body.voteTopic === 'string' ? req.body.voteTopic.slice(0, 200) : '';
+      if (voteAction === 'vote') {
+        const voterName = typeof req.body.voterName === 'string' ? req.body.voterName.slice(0, 40) : '投票人';
+        const voterRole = typeof req.body.voterRole === 'string' ? req.body.voterRole.slice(0, 20) : '';
+        const voteMode = req.body.voteMode === 'multi' ? '多選方案' : req.body.voteMode === 'open' ? '開放討論' : '二元表決';
+        const validOptions = Array.isArray(req.body.voteOptions)
+          ? req.body.voteOptions
+            .filter((o: any) => o && typeof o.id === 'string' && typeof o.label === 'string')
+            .slice(0, 8)
+            .map((o: any) => `- ${o.id}: ${o.label.slice(0, 30)}`)
+          : [];
+        const voteOptions = validOptions.length > 0
+          ? validOptions.join('\n')
+          : '- yes: 贊成\n- no: 反對\n- abstain: 棄權';
+        systemPrompt = `你正在參與辦公室投票。投票人：${voterName}（${voterRole}），請以該角色的專業與性格表態。\n議案：「${voteTopic}」\n模式：${voteMode}\n候選選項（id: 標籤）：\n${voteOptions}\n請只回傳 JSON，不要輸出引號外的任何文字：{"choice": "<選項id>", "reason": "<兩句內理由，繁體中文>"}\n若無法決定，choice 填 "abstain"。`;
+        messagesPayload = [
+          { role: 'system', content: systemPrompt },
+          ...(Array.isArray(contextMessages) ? contextMessages.slice(-4).map((m: any) => ({
+            role: 'user',
+            content: `[${m.speakerName || 'unknown'}] ${typeof m.text === 'string' ? m.text.slice(0, 300) : ''}`
+          })) : []),
+          { role: 'user', content: '請針對上述議案投票並回傳 JSON。' }
+        ];
+      } else if (voteAction === 'conclude') {
+        const hostName = typeof req.body.hostName === 'string' ? req.body.hostName.slice(0, 40) : '主持人';
+        const tallyText = typeof req.body.tallyText === 'string' ? req.body.tallyText.slice(0, 1500) : '';
+        const contextText = typeof req.body.contextText === 'string' ? req.body.contextText.slice(0, 2000) : '';
+        systemPrompt = `你是會議主持人${hostName}，請為議案「${voteTopic}」撰寫表決後摘要。\n表決結果：\n${tallyText}\n討論摘錄：\n${contextText}\n請只回傳 JSON，不要輸出引號外的任何文字，格式如下：{"process": "討論過程摘要，2到4點條列，繁體中文", "conclusion": "定案結論，繁體中文", "followups": ["建議深入討論的項目1", "項目2"]}\n其中 followups 為 1 到 3 個尚未解決、值得下輪深入的項目；若無則填空陣列。`;
+        messagesPayload = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: '請寫出定案結論並回傳 JSON。' }
+        ];
+      } else {
+        systemPrompt = `議案：「${voteTopic}」。請提出 3 到 4 個具體可行的候選方案，只回傳 JSON，不要輸出引號外的任何文字：{"options": ["方案A", "方案B", "方案C"]}`;
+        messagesPayload = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: '請提出候選方案並回傳 JSON。' }
+        ];
+      }
     } else {
       const basePrompt = loadRolePrompt(speakerRole);
       const sceneBlock = sceneData ? `\n\n${loadScenePrompt(sceneData)}` : '';
@@ -325,7 +370,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     const endpoint = provider.sdk === 'ollama' ? `${baseUrl}/api/chat` : `${baseUrl}/chat/completions`;
 
     // 格式化 Console Log 輸出
-    if (isTopicGen) {
+    if (isStructuredVote) {
+      console.log('\n=================== 🗳️ Structured Vote ===================');
+      console.log(`[Action]   : ${voteAction}`);
+      console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
+    } else if (isTopicGen) {
       console.log('\n=================== 🎲 AI Topic Generation ===================');
       console.log(`[Provider] : ${providerId} (${provider.description || providerId})`);
       console.log(`[SDK/Model]: ${provider.sdk} / ${activeModel || provider.defaultModel}`);
@@ -394,6 +443,14 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       ? rawContent.map((p: any) => (typeof p === 'string' ? p : p?.text ?? '')).join('')
       : rawContent;
     if (text && typeof text === 'string') {
+      // 結構化投票回傳 JSON：跳過引號清除，改以 regex 提取 JSON 區塊
+      if (isStructuredVote) {
+        const jsonMatch = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+        const raw = jsonMatch ? jsonMatch[0] : text.slice(0, 2000);
+        console.log(`[Structured Vote]: "${raw.slice(0, 200)}"`);
+        console.log('=========================================================\n');
+        return res.json({ status: 'success', text: raw });
+      }
       const cleanResult = text
         .replace(/^(\[\w+\]\s*)+/g, '')          // 剝掉 [AD_1] [AD_1] 類前綴
         .replace(/^[\w_]+(\s*\([^)]*\))?\s*:\s*/g, '') // 剝掉 AD_1 (AD): 類前綴

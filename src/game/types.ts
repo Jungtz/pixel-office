@@ -148,6 +148,41 @@ export interface MeetingState {
   startTime: number;
 }
 
+export type VoteMode = 'binary' | 'multi' | 'open';
+export type VoteStatus = 'collecting' | 'pending_ruling' | 'done';
+
+export interface VoteOption {
+  id: string;
+  label: string;
+}
+
+export interface VoteRecord {
+  agentId: string;
+  agentName: string;
+  role: RoleType;
+  /** 開放模式為 null，其餘為 option.id（含棄權 'abstain'） */
+  choiceId: string | null;
+  reason: string;
+}
+
+export interface VoteSession {
+  id: string;
+  topic: string;
+  mode: VoteMode;
+  options: VoteOption[];
+  records: VoteRecord[];
+  /** 討論過程摘要（2-4點條列，主持人撰寫） */
+  process?: string;
+  conclusion?: string;
+  /** 建議深入討論的項目（下輪前提依據之一） */
+  followups?: string[];
+  /** 多選獲勝項 option.id，平票為 null */
+  winnerOptionId?: string | null;
+  ruling?: 'passed' | 'rejected' | 'tied' | 'concluded';
+  status: VoteStatus;
+  createdAt: string;
+}
+
 export interface GameEvent {
   id: string;
   name: string;
