@@ -39,7 +39,8 @@
 ## 5. 存檔（`src/services/chatLogService.ts`＋`server.ts` 聊天紀錄端點）
 
 - `ChatLogDetail` 加 `votes: VoteSession[]`；接續歷史時結果面板唯讀回看
-- Markdown 持久化：`POST /api/chat-log` 接受 `votes` 陣列，檔尾以 HTML 註解保存結構化 JSON（不破壞人類閱讀）：`<!-- VOTES_DATA: [...] -->`；`GET /api/chat-log` 以 regex 解析還原，舊檔無註解則回空陣列
+- Markdown 持久化：`POST /api/chat-log` 接受 `votes` 陣列，檔尾寫人類可讀 `## 投票結果` 區段（議案／逐人表態／討論過程／定案結論／建議深入）＋ HTML 註解保存結構化 JSON（不破壞人類閱讀）：`<!-- VOTES_DATA: [...] -->`；`GET /api/chat-log` 以 regex 解析還原 votes 與 `## 前情提要`，舊檔無註解則回空陣列／空字串
+- 接續摘要按需生成（`ResumeModal`）：檔內已有摘要（含表決結論）直接預填為檔案版，不自動打 LLM；僅無摘要、接續主題變更（提示重算）、用戶按重新生成時才呼叫 `/api/chat-logs/summary`；`App` 自動存檔帶 `votes`，接續還原寫回 `votesRef`，後續存檔接力寫檔
 
 ## 6. 邊界
 

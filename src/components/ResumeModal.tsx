@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { LLMConfig } from '../services/aiAgent';
 import {
   fetchChatLogList,
@@ -39,6 +39,9 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
   const [summary, setSummary] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryMocked, setSummaryMocked] = useState(false);
+  const [summaryFromFile, setSummaryFromFile] = useState(false);
+  /** 摘要所依據的接續主題：不同即提示重算（比對用 ref，避免多餘渲染） */
+  const summaryTopicRef = useRef('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -49,6 +52,7 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
     setDetail(null);
     setTopicDraft('');
     setSummary('');
+    setSummaryFromFile(false);
     fetchChatLogList()
       .then(list => {
         if (!cancelled) setLogs(list);
@@ -66,10 +70,12 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
 
   const runSummary = async (target: ChatLogDetail, topic: string) => {
     setSummaryLoading(true);
+    setSummaryFromFile(false); // 進入重新生成即脫離檔案版，失敗也不回頭
     try {
       const { summary: text, mocked } = await summarizeChatLog(llmConfig, topic, target.messages);
       setSummary(text);
       setSummaryMocked(mocked);
+      summaryTopicRef.current = topic;
     } catch {
       setSummary('摘要產生失敗，將僅使用最近訊息接續。');
       setSummaryMocked(true);
@@ -85,6 +91,8 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
     setDetailError('');
     setTopicDraft('');
     setSummary('');
+    setSummaryFromFile(false);
+    summaryTopicRef.current = '';
     setDetailLoading(true);
     try {
       const loaded = await fetchChatLogDetail(filename);
@@ -92,7 +100,15 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
       setDetailLoading(false);
       const topic = loaded.topic || '';
       setTopicDraft(topic);
-      await runSummary(loaded, topic);
+      // 檔內已有摘要（含表決結論）則直接沿用，只在無摘要時才打一次 AI
+      if (loaded.summary) {
+        setSummary(loaded.summary);
+        setSummaryMocked(false);
+        setSummaryFromFile(true);
+        summaryTopicRef.current = topic;
+      } else {
+        await runSummary(loaded, topic);
+      }
     } catch (err) {
       setDetailLoading(false);
       setDetailError(err instanceof Error ? err.message : '讀取歷史檔案失敗');
@@ -101,6 +117,7 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
 
   const speakerCount = detail ? distinctSpeakers(detail.messages).length : 0;
   const canConfirm = detail !== null && !detailLoading && !summaryLoading && topicDraft.trim() !== '';
+  const topicChanged = detail !== null && topicDraft.trim() !== '' && topicDraft.trim() !== summaryTopicRef.current && summaryTopicRef.current !== '';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,7 +128,8 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
       topic: topicDraft.trim(),
       startedAt: detail.startedAt,
       messages: detail.messages,
-      summary: summary.trim()
+      summary: summary.trim(),
+      votes: detail.votes || []
     });
   };
 
@@ -211,7 +229,7 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
           {detail && (
             <form onSubmit={handleSubmit} className="flex flex-col gap-3">
               <label className="flex flex-col gap-1.5 text-xs font-mono text-slate-400">
-                接續主題（{detail.messages.length} 則・{speakerCount} 人）
+                接續主題（{detail.messages.length} 則・{speakerCount} 人{detail.votes && detail.votes.length > 0 ? `・含 ${detail.votes.length} 場表決結論` : ''}）
                 <input
                   type="text"
                   value={topicDraft}
@@ -231,7 +249,12 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
 
               <label className="flex flex-col gap-1.5 text-xs font-mono text-slate-400">
                 <span className="flex items-center justify-between">
-                  <span>前情提要{summaryMocked ? '（摘錄版）' : '（AI 版）'}</span>
+                  <span>
+                    前情提要{summaryFromFile ? '（檔案版）' : summaryMocked ? '（摘錄版）' : '（AI 版）'}
+                    {topicChanged && !summaryLoading && (
+                      <span className="text-amber-400">・主題已變更，建議重新生成</span>
+                    )}
+                  </span>
                   <button
                     type="button"
                     disabled={summaryLoading}

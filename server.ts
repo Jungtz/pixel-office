@@ -4,6 +4,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { getSkills, runSkills } from './skillsLoader';
+import { sanitizeVotes, formatVotesSection, parseVotesData, parseSummarySection } from './chatLogFormat';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -504,7 +505,7 @@ function sanitizeFilename(topic: string): string {
  */
 app.post('/api/chat-log', (req: Request, res: Response) => {
   try {
-    const { sessionId, topic, startedAt, messages, resumeFrom, historySummary } = req.body || {};
+    const { sessionId, topic, startedAt, messages, resumeFrom, historySummary, votes } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.json({ status: 'skipped', reason: 'empty messages' });
     }
@@ -543,6 +544,8 @@ app.post('/api/chat-log', (req: Request, res: Response) => {
       return `- [${time}] **${name}** (${role})：${text}`;
     });
 
+    const voteSection = formatVotesSection(sanitizeVotes(votes));
+
     const md = [
       '# PixelOffice 對話紀錄',
       '',
@@ -556,6 +559,7 @@ app.post('/api/chat-log', (req: Request, res: Response) => {
       '## 對話',
       '',
       ...lines,
+      ...(voteSection.length > 0 ? ['', ...voteSection] : []),
       ''
     ].join('\n');
 
@@ -628,6 +632,8 @@ app.get('/api/chat-log', (req: Request, res: Response) => {
     const content = fs.readFileSync(full, 'utf-8');
     const topic = content.match(/^-\s*主題：(.*)$/m)?.[1]?.trim() || '';
     const startedAt = content.match(/^-\s*開始時間：(.*)$/m)?.[1]?.trim() || '';
+    const summary = parseSummarySection(content);
+    const votes = parseVotesData(content);
     const messages: { timestamp: string; speakerName: string; speakerRole: string; text: string }[] = [];
     const re = /^-\s*\[(.*?)\]\s*\*\*(.*?)\*\*\s*\((.*?)\)：(.*)$/gm;
     let m: RegExpExecArray | null;
@@ -640,7 +646,7 @@ app.get('/api/chat-log', (req: Request, res: Response) => {
         text: m[4].trim()
       });
     }
-    return res.json({ status: 'ok', filename: file, topic, startedAt, messages });
+    return res.json({ status: 'ok', filename: file, topic, startedAt, summary, votes, messages });
   } catch (err: any) {
     return res.json({ status: 'error', error: err.message });
   }

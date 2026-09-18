@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createDefaultMap, OFFICE_LOCATIONS, isTileWalkable, TILE_SIZE } from './game/officeMap';
 import { findPath } from './game/pathfinding';
-import { AgentCharacter, ChatMessage, Position, RoleType, MeetingState } from './game/types';
+import { AgentCharacter, ChatMessage, Position, RoleType, MeetingState, VoteSession } from './game/types';
 import { fetchLLMResponse, LLMConfig } from './services/aiAgent';
 import { getProviderList, getProviderById, getGameLoopConfig } from './services/configService';
 import { ROLE_CONFIGS, ROLE_ALIASES } from './services/roles';
@@ -51,6 +51,8 @@ export const App: React.FC = () => {
   const [currentTeam, setCurrentTeam] = useState<string>('it');
 
   const stockIdRef = useRef<string | null>(null);
+  /** 歷次表決（含定案結論）：投票 UI 落地前為空，自動存檔照常帶入寫檔 */
+  const votesRef = useRef<VoteSession[]>([]);
 
   /** 開場／主持人：BOSS 優先，否則該團 leader 角色（資訊 PM／財金 CFO／法務 COU） */
   const findLeader = (list: AgentCharacter[], team: string): AgentCharacter | undefined => {
@@ -121,7 +123,9 @@ export const App: React.FC = () => {
       })),
       // 接續模式：覆寫同一檔（後端不刪檔）；新開模式則為 undefined 走 stamp+主題命名
       resumeFrom: sessionFileRef.current || undefined,
-      historySummary: historySummary || undefined
+      historySummary: historySummary || undefined,
+      // 歷次表決結果與定案結論：寫入 chat-logs，下輪接續時讀回作前提
+      votes: votesRef.current
     };
 
     const timer = setTimeout(() => {
@@ -165,6 +169,7 @@ export const App: React.FC = () => {
     sessionFileRef.current = null;
     historySummaryRef.current = '';
     setHistorySummary('');
+    votesRef.current = []; // 新冒險清空舊表決，避免污染新檔
 
     const newAgents: AgentCharacter[] = [];
     let deskIdx = 0;
@@ -290,6 +295,8 @@ export const App: React.FC = () => {
     sessionFileRef.current = session.filename;
     historySummaryRef.current = session.summary || '';
     setHistorySummary(session.summary || '');
+    // 還原歷次表決（定案結論）：後續自動存檔會帶回寫檔；接續摘要已含結論文字
+    votesRef.current = Array.isArray(session.votes) ? session.votes : [];
     setCurrentTopic(session.topic);
     // 接續歷史：從主題自動偵測股票代號（後端無代號時也會自行偵測，此處為前端顯示一致性）
     const resumedStock = detectStockId(session.topic);
@@ -943,6 +950,7 @@ export const App: React.FC = () => {
               historySummaryRef.current = '';
               setHistorySummary('');
               stockIdRef.current = null;
+              votesRef.current = []; // 重設清空舊表決
               if (meetingState.isActive) {
                 setMeetingState({ isActive: false, topic: '', participants: [], log: [], startTime: 0 });
               }

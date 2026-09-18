@@ -1,4 +1,5 @@
 import type { LLMConfig } from './aiAgent';
+import type { VoteSession } from '../game/types';
 
 export interface ChatLogMessage {
   timestamp: string;
@@ -21,6 +22,10 @@ export interface ChatLogDetail {
   topic: string;
   startedAt: string;
   messages: ChatLogMessage[];
+  /** 檔內既有前情提要（無則 ''） */
+  summary: string;
+  /** 檔內結構化投票（含定案結論，無則 []） */
+  votes: VoteSession[];
 }
 
 export interface ResumedSession {
@@ -29,6 +34,7 @@ export interface ResumedSession {
   startedAt: string;
   messages: ChatLogMessage[];
   summary: string;
+  votes: VoteSession[];
 }
 
 /**
@@ -102,7 +108,9 @@ export async function fetchChatLogDetail(file: string): Promise<ChatLogDetail> {
       filename: data.filename,
       topic: data.topic || '',
       startedAt: data.startedAt || '',
-      messages: data.messages as ChatLogMessage[]
+      messages: data.messages as ChatLogMessage[],
+      summary: typeof data.summary === 'string' ? data.summary : '',
+      votes: Array.isArray(data.votes) ? data.votes as VoteSession[] : []
     };
   }
   throw new Error(data.error || '讀取歷史檔案失敗');
