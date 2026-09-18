@@ -21,6 +21,8 @@ export interface RoleConfig {
   systemPrompt: string;
   interests: string[];
   defaultCount: number;
+  /** 所屬團隊（it / finance / legal），共用角可歸屬多團 */
+  teams: string[];
 }
 
 export interface Position {

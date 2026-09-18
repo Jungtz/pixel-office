@@ -1,4 +1,5 @@
 import { RoleConfig } from '../game/types';
+import { normalizeTeams } from './teams';
 
 /**
  * 動態角色載入器：
@@ -133,7 +134,8 @@ function buildRoleConfig(file: RawRoleFile): RoleConfig {
     catchphrases: strList('catchphrases', fallback.catchphrases),
     systemPrompt: file.body || `你是一名 ${file.id}。說話請保持該職位的性格特點。`,
     interests: strList('interests', fallback.interests),
-    defaultCount: num('defaultCount', 0)
+    defaultCount: num('defaultCount', 0),
+    teams: normalizeTeams(meta)
   };
 }
 
@@ -156,4 +158,9 @@ export function buildRoleAliases(roleConfigs: Record<string, RoleConfig>): Recor
     aliases[id.replace('_', '')] = id;
   }
   return aliases;
+}
+
+/** @param teamId 團隊 id @returns 該團角色 id 列表（依載入順序） */
+export function getRolesByTeam(roleConfigs: Record<string, RoleConfig>, teamId: string): string[] {
+  return Object.keys(roleConfigs).filter(id => (roleConfigs[id].teams || []).includes(teamId));
 }

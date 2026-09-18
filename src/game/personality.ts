@@ -23,6 +23,16 @@ const ROLE_TRAIT_BIASES: Record<string, Partial<PersonalityTraits>> = {
   UIUX:  { sociability: 0.55, diligence: 0.70, curiosity: 0.80, caffeineAddiction: 0.60, stressTolerance: 0.40, expressiveness: 0.70, humorLevel: 0.48 },
   AD:    { sociability: 0.60, diligence: 0.55, curiosity: 0.85, caffeineAddiction: 0.45, stressTolerance: 0.50, expressiveness: 0.88, humorLevel: 0.62 },
   INTERN:{ sociability: 0.65, diligence: 0.88, curiosity: 0.75, caffeineAddiction: 0.30, stressTolerance: 0.20, expressiveness: 0.55, humorLevel: 0.55 },
+  CFO:   { sociability: 0.70, diligence: 0.72, curiosity: 0.35, caffeineAddiction: 0.55, stressTolerance: 0.60, expressiveness: 0.75, humorLevel: 0.35 },
+  ACC:   { sociability: 0.42, diligence: 0.85, curiosity: 0.45, caffeineAddiction: 0.60, stressTolerance: 0.45, expressiveness: 0.38, humorLevel: 0.32 },
+  AUD:   { sociability: 0.45, diligence: 0.80, curiosity: 0.70, caffeineAddiction: 0.55, stressTolerance: 0.40, expressiveness: 0.42, humorLevel: 0.30 },
+  ANA:   { sociability: 0.48, diligence: 0.78, curiosity: 0.68, caffeineAddiction: 0.65, stressTolerance: 0.52, expressiveness: 0.50, humorLevel: 0.42 },
+  STK:   { sociability: 0.72, diligence: 0.80, curiosity: 0.50, caffeineAddiction: 0.45, stressTolerance: 0.38, expressiveness: 0.62, humorLevel: 0.45 },
+  COU:   { sociability: 0.58, diligence: 0.76, curiosity: 0.55, caffeineAddiction: 0.50, stressTolerance: 0.62, expressiveness: 0.68, humorLevel: 0.33 },
+  CMP:   { sociability: 0.46, diligence: 0.84, curiosity: 0.48, caffeineAddiction: 0.50, stressTolerance: 0.42, expressiveness: 0.40, humorLevel: 0.28 },
+  CTR:   { sociability: 0.50, diligence: 0.82, curiosity: 0.60, caffeineAddiction: 0.55, stressTolerance: 0.48, expressiveness: 0.55, humorLevel: 0.36 },
+  IPR:   { sociability: 0.52, diligence: 0.72, curiosity: 0.82, caffeineAddiction: 0.55, stressTolerance: 0.50, expressiveness: 0.60, humorLevel: 0.40 },
+  LIT:   { sociability: 0.62, diligence: 0.74, curiosity: 0.58, caffeineAddiction: 0.60, stressTolerance: 0.58, expressiveness: 0.80, humorLevel: 0.44 },
 };
 
 // 動態角色無專屬特質時的通用基準
