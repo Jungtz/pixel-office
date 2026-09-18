@@ -29,8 +29,8 @@ export interface StockPluginConfig {
 
 const DEFAULTS: StockPluginConfig = {
   enabled: true,
-  gatewayUrl: 'http://localhost:8815',
-  viewerUrl: 'http://localhost:8814',
+  gatewayUrl: 'https://web.sytes.net/stock-gateway',
+  viewerUrl: 'https://web.sytes.net/stock',
   timeoutMs: 8000,
   cacheTtlMs: 300000,
   maxReportChars: 1500,
