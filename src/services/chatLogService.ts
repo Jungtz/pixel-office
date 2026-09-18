@@ -47,6 +47,8 @@ export function distinctSpeakers(messages: ChatLogMessage[]): { name: string; ro
     const name = (m.speakerName || '').trim();
     const role = (m.speakerRole || '').trim().toUpperCase();
     if (!name || !role) continue;
+    // 系統訊息（投票發起／定案）不重建為角色
+    if (role === 'SYSTEM') continue;
     if (!roleVotes.has(name)) {
       roleVotes.set(name, new Map());
       order.push(name);

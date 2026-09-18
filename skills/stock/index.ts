@@ -286,24 +286,28 @@ export async function getStockBlock(stockId: string, cfgOverride?: StockPluginCo
 
   // 近20日均線與趨勢（gateway 優先，缺失時 TWSE 直連備援）
   const bars = normalizeBars(isObj(priceRaw) ? (priceRaw as Record<string, unknown>)['data'] : priceRaw);
+  const snapshotPrice = isObj(snapshot) ? num(pick(snapshot, ['price', 'close', 'last'])) : null;
+  const snapshotValid = snapshotPrice !== null && snapshotPrice > 0;
   let twseBars: PriceBar[] = [];
-  if (!isObj(snapshot) && bars.length < 5) {
+  if ((!isObj(snapshot) || !snapshotValid) && bars.length < 5) {
     twseBars = await tryFetch('twse直連', () => fetchTwseDay(id, cfg.timeoutMs)) || [];
   }
   const effBars = bars.length >= 5 ? bars : twseBars;
 
-  // 現價快照（gateway 優先，缺失時取 TWSE 直連最後一根）
-  if (isObj(snapshot)) {
-    const price = num(pick(snapshot, ['price', 'close', 'last']));
+  // 現價快照（gateway 優先；0/缺失視為異常，改用最近收盤並明示，絕不注入現價0）
+  if (snapshotValid && isObj(snapshot)) {
+    const price = snapshotPrice;
     const change = num(pick(snapshot, ['change']));
     const changeRate = num(pick(snapshot, ['change_rate', 'changeRate']));
     const open = num(pick(snapshot, ['open']));
     const high = num(pick(snapshot, ['high']));
     const low = num(pick(snapshot, ['low']));
     lines.push(`- 現價 ${fmtNum(price)}（${change !== null && change >= 0 ? '+' : ''}${fmtNum(change)}，${changeRate !== null && changeRate >= 0 ? '+' : ''}${fmtNum(changeRate)}%），開${fmtNum(open)}／高${fmtNum(high)}／低${fmtNum(low)}`);
-  } else if (twseBars.length > 0) {
-    const lastBar = twseBars[twseBars.length - 1];
-    lines.push(`- 現價 ${fmtNum(lastBar.close)}（${lastBar.date}收盤，TWSE直連備援無漲跌幅），開${fmtNum(lastBar.open)}／高${fmtNum(lastBar.high)}／低${fmtNum(lastBar.low)}`);
+  } else if (effBars.length > 0) {
+    const lastBar = effBars[effBars.length - 1];
+    lines.push(`- 現價 ${fmtNum(lastBar.close)}（${lastBar.date}最近交易日收盤，現價快照缺失勿引用0下單），開${fmtNum(lastBar.open)}／高${fmtNum(lastBar.high)}／低${fmtNum(lastBar.low)}`);
+  } else {
+    lines.push(`- 現價缺失（快照異常，勿引用0下單或計算損益，待確認即時行情）`);
   }
 
   if (effBars.length >= 5) {
@@ -371,16 +375,17 @@ export async function getStockBlock(stockId: string, cfgOverride?: StockPluginCo
     }
   }
 
-  // 基本面＋最新財報（來源欄位不固定，抓常見鍵，缺則截斷原文）
+  // 基本面＋最新財報（全0/缺失視為異常，不注入0，防 LLM 硬引0估值）
   if (isObj(fundRaw)) {
     const inner = isObj(fundRaw['data']) ? (fundRaw['data'] as Record<string, unknown>) : fundRaw;
     const pe = num(pick(inner, ['pe', 'per', '本益比']));
     const pb = num(pick(inner, ['pb', 'pbr', '淨值比']));
     const divYield = num(pick(inner, ['dividend_yield', 'dividendYield', '殖利率']));
-    if (pe !== null || pb !== null || divYield !== null) {
+    const hasFund = [pe, pb, divYield].some(v => v !== null && v !== 0);
+    if (hasFund) {
       lines.push(`- 基本面：本益比 ${fmtNum(pe)}／淨值比 ${fmtNum(pb)}／殖利率 ${fmtNum(divYield)}%`);
     } else {
-      lines.push(`- 基本面：${trunc(JSON.stringify(inner), 300)}`);
+      lines.push(`- 基本面缺失（來源異常，勿引用0估值，禁止以0本益比論證）`);
     }
   }
   if (isObj(finReportRaw)) {
@@ -390,10 +395,11 @@ export async function getStockBlock(stockId: string, cfgOverride?: StockPluginCo
     const revenue = num(pick(inner, ['revenue', '營收', 'operating_revenue']));
     const eps = num(pick(inner, ['eps', '每股盈餘']));
     const margin = num(pick(inner, ['gross_margin', 'grossMargin', '毛利率']));
-    if (revenue !== null || eps !== null) {
+    const hasReport = (revenue !== null && revenue !== 0) || eps !== null;
+    if (hasReport) {
       lines.push(`- 最新財報（${String(year ?? '?')}Q${String(quarter ?? '?')}）：營收 ${fmtNum(revenue, 0)}／EPS ${fmtNum(eps)}／毛利率 ${fmtNum(margin)}%`);
     } else {
-      lines.push(`- 最新財報：${trunc(JSON.stringify(inner), 300)}`);
+      lines.push(`- 最新財報缺失（來源異常，勿引用0營收／0EPS論證）`);
     }
   }
 
@@ -468,7 +474,7 @@ const stockSkill: ChatSkill = {
     return detectStockId(ctx.topic || '');
   },
   buildBlock: (key, section) => getStockBlock(key, loadStockConfig(section)),
-  instruction: '若系統提示含【即時台股情報】，必須引用其中的具體數字（現價、均線、法人、財報任選其一以上）論證，不可無視數據空談。'
+  instruction: '若系統提示含【即時台股情報】，必須引用其中的具體數字（現價、均線、法人、財報任選其一以上）論證，不可無視數據空談。台股1張=1000股，損益=(賣價-成本)x股數，先換算股數再報金額；凡標示缺失的數據禁止引用0計算。'
 };
 
 export default stockSkill;

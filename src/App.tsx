@@ -20,6 +20,10 @@ import { SetupModal, RoleSetupConfig, ResumeLlmConfig } from './components/Setup
 import { TopicModal } from './components/TopicModal';
 import { ChatLog } from './components/ChatLog';
 import { ResumeModal } from './components/ResumeModal';
+import { VoteModal } from './components/VoteModal';
+import { VoteResult } from './components/VoteResult';
+import { classifyTopicForVote } from './services/topicType';
+import { voteChoiceLabel } from './services/voteService';
 import { backupChatLog, distinctSpeakers, parseStamp, type ResumedSession } from './services/chatLogService';
 
 export const App: React.FC = () => {
@@ -72,6 +76,13 @@ export const App: React.FC = () => {
   const isPausedRef = useRef<boolean>(false);
   const [roundsExhausted, setRoundsExhausted] = useState<boolean>(false);
 
+  /** 投票：發起彈窗／結果彈窗／收集中旗標（投票中暫停自主發言循環） */
+  const [isVoteOpen, setIsVoteOpen] = useState<boolean>(false);
+  const [voteSession, setVoteSession] = useState<VoteSession | null>(null);
+  const [isVoteResultOpen, setIsVoteResultOpen] = useState<boolean>(false);
+  const [isVoting, setIsVoting] = useState<boolean>(false);
+  const isVotingRef = useRef<boolean>(false);
+
   const inGameTimeRef = useRef<number>(9);
 
   useEffect(() => {
@@ -81,6 +92,10 @@ export const App: React.FC = () => {
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
+
+  useEffect(() => {
+    isVotingRef.current = isVoting;
+  }, [isVoting]);
 
   const lastDialogueTime = useRef<number>(Date.now());
   const dialogueRoundCount = useRef<number>(0);
@@ -416,6 +431,12 @@ export const App: React.FC = () => {
         return;
       }
 
+      // 投票收集中：凍結自主行為與自動對話，逐票 LLM 直寫投票紀錄
+      if (isVotingRef.current) {
+        lastBehaviorTick.current = now;
+        return;
+      }
+
       // 如果正在開會，交由會議邏輯驅動
       if (meetingState.isActive) return;
 
@@ -489,6 +510,7 @@ export const App: React.FC = () => {
         !isGeneratingRef.current &&
         !activeDialogueRef.current &&
         !userTurnPendingRef.current &&
+        !isVotingRef.current &&
         !maxReached
       ) {
         lastDialogueTime.current = now;
@@ -569,7 +591,7 @@ export const App: React.FC = () => {
     agentsOverride?: AgentCharacter[],
     llmOverride?: LLMConfig
   ) => {
-    if (isGeneratingRef.current) return;
+    if (isGeneratingRef.current || isVotingRef.current) return;
     if (speaker.isUser && !aiTakeoverRef.current) {
       setUserTurnPending(speaker);
       userTurnPendingRef.current = true;
@@ -828,6 +850,114 @@ export const App: React.FC = () => {
     handleDispatchTask(eventTopic);
   };
 
+  // 6b. 投票表決：系統訊息＋像素 emoji＋存檔（votesRef 由自動存檔接力寫檔）
+  const buildSystemMessage = (text: string): ChatMessage => {
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const uid = `system_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    return {
+      id: uid,
+      speakerId: uid,
+      speakerName: '系統',
+      speakerRole: 'SYSTEM',
+      text,
+      timestamp: timeStr,
+      isMeeting: meetingState.isActive
+    };
+  };
+
+  const voteEmojiFor = (choiceId: string | null): string => {
+    if (choiceId === null) return '💬';
+    if (choiceId === 'yes') return '⭕';
+    if (choiceId === 'no') return '❌';
+    if (choiceId === 'abstain') return '⚪';
+    return '🔹';
+  };
+
+  const handleOpenVote = () => {
+    // 對話 LLM 生成中不另起投票：維持一次只跑一個 LLM
+    if (agents.length === 0 || isVotingRef.current || isGeneratingRef.current) return;
+    setIsVoteOpen(true);
+  };
+
+  const handleVoteStart = (voteTopic: string, voterIds: string[]) => {
+    setIsVoting(true);
+    isVotingRef.current = true;
+    setChatMessages(prev => [...prev, buildSystemMessage(`🗳️ 主席發起投票：「${voteTopic}」（${voterIds.length} 人逐票表態中…）`)]);
+    setAgents(prev =>
+      prev.map(a =>
+        voterIds.includes(a.id)
+          ? { ...a, emojiBubble: '💭', emojiTimer: 30 }
+          : a
+      )
+    );
+  };
+
+  const handleVoteComplete = (session: VoteSession) => {
+    // 重複投票覆蓋前票：同議案＋同模式只留最新一次
+    const dupIdx = votesRef.current.findIndex(v => v.topic === session.topic && v.mode === session.mode);
+    if (dupIdx >= 0) {
+      votesRef.current = votesRef.current.map((v, i) => (i === dupIdx ? session : v));
+    } else {
+      votesRef.current = [...votesRef.current, session];
+    }
+    setVoteSession(session);
+    setIsVoteOpen(false);
+    setIsVoting(false);
+    isVotingRef.current = false;
+    const resultLine = session.ruling === 'passed'
+      ? '📢 表決通過'
+      : session.ruling === 'rejected'
+        ? '📢 表決否決'
+        : session.status === 'pending_ruling'
+          ? '📢 平票，待主席裁決'
+          : `📢 定案：${session.winnerOptionId ? voteChoiceLabel(session.options, session.winnerOptionId) : '已有結論'}`;
+    setChatMessages(prev => [...prev, buildSystemMessage(`${resultLine} —「${session.topic}」：${session.conclusion || ''}`)]);
+    setAgents(prev =>
+      prev.map(a => {
+        const rec = session.records.find(r => r.agentId === a.id);
+        if (!rec) return a;
+        return { ...a, emojiBubble: voteEmojiFor(rec.choiceId), emojiTimer: 6 };
+      })
+    );
+    soundManager.playFanfareSound();
+    setIsVoteResultOpen(true);
+  };
+
+  /** 收集中止／失敗：清除旗標＋思考泡泡，聊天流留一則⚠️收尾（避免孤兒🗳️） */
+  const handleVoteAbort = (reason: 'cancelled' | 'failed') => {
+    // X 關閉已收尾過（handleVoteClose 先清旗標）→ 後到的 abort 回調直接丟棄，防⚠️重複
+    if (!isVotingRef.current) return;
+    setIsVoting(false);
+    isVotingRef.current = false;
+    setAgents(prev =>
+      prev.map(a => (a.emojiBubble === '💭' ? { ...a, emojiBubble: null, emojiTimer: 0 } : a))
+    );
+    setChatMessages(prev => [...prev, buildSystemMessage(
+      reason === 'cancelled' ? '⚠️ 投票收集中止，已回到發起畫面。' : '⚠️ 投票收集中斷，請重試。'
+    )]);
+  };
+
+  const handleVoteClose = () => {
+    // 收集中關閉＝中止：VoteModal 內部已丟棄部分票，清除旗標＋思考泡泡＋⚠️收尾
+    const wasVoting = isVotingRef.current;
+    setIsVoteOpen(false);
+    setIsVoting(false);
+    isVotingRef.current = false;
+    if (wasVoting) {
+      setAgents(prev =>
+        prev.map(a => (a.emojiBubble === '💭' ? { ...a, emojiBubble: null, emojiTimer: 0 } : a))
+      );
+      setChatMessages(prev => [...prev, buildSystemMessage('⚠️ 投票收集中止，已回到發起畫面。')]);
+    }
+  };
+
+  const handleVoteRuling = (updated: VoteSession) => {
+    votesRef.current = votesRef.current.map(v => (v.id === updated.id ? updated : v));
+    setVoteSession(updated);
+    // conclusion 本體已含「主席裁決：…」前綴，此處只補議案名，避免重複
+    setChatMessages(prev => [...prev, buildSystemMessage(`📢 「${updated.topic}」${updated.conclusion || '主席已裁決。'}`)]);
+  };
+
   // 7. 解析 AI 回覆中的點名 @Role 或 @Name（使用者扮演角色優先匹配）
   const parseNomination = (text: string): AgentCharacter | null => {
     const roleAliases: Record<string, string> = ROLE_ALIASES;
@@ -925,11 +1055,13 @@ export const App: React.FC = () => {
         onCallMeeting={handleCallMeeting}
         onDispatchTask={handleDispatchTask}
         onTriggerRandomEvent={handleTriggerRandomEvent}
+        onStartVote={handleOpenVote}
+        canVote={agents.length > 0 && !isVoting && !isBusyGenerating && !roundsExhausted}
         onToggleChatLog={() => setIsChatLogOpen(prev => !prev)}
         onLoadHistory={handleOpenResumeInGame}
         onInterject={handleInterject}
         interjectSpeakers={agents.map(a => ({ id: a.id, name: a.name, role: a.role, isUser: a.isUser === true }))}
-        canInterject={agents.length > 0 && !userTurnPending && !isBusyGenerating && !roundsExhausted}
+        canInterject={agents.length > 0 && !userTurnPending && !isBusyGenerating && !isVoting && !roundsExhausted}
         isPaused={isPaused}
         onTogglePause={() => {
           const newState = !isPaused;
@@ -951,6 +1083,11 @@ export const App: React.FC = () => {
               setHistorySummary('');
               stockIdRef.current = null;
               votesRef.current = []; // 重設清空舊表決
+              setIsVoteOpen(false);
+              setVoteSession(null);
+              setIsVoteResultOpen(false);
+              setIsVoting(false);
+              isVotingRef.current = false;
               if (meetingState.isActive) {
                 setMeetingState({ isActive: false, topic: '', participants: [], log: [], startTime: 0 });
               }
@@ -1035,14 +1172,32 @@ export const App: React.FC = () => {
             left: '50%',
             transform: 'translate(-50%, -50%)',
             zIndex: 80,
-            pointerEvents: 'auto'
+            pointerEvents: 'auto',
+            maxWidth: '92vw',
+            padding: '20px 32px'
           }}
-          className="flex flex-col items-center gap-3 px-6 py-4 bg-slate-900 border-2 border-amber-400 rounded shadow-2xl"
+          className="flex flex-col items-center gap-3 bg-slate-900 border-2 border-amber-400 rounded shadow-2xl text-center"
         >
           <p className="text-amber-400 font-mono font-bold text-sm">
             對話已達設定上限（{getGameLoopConfig().maxDialogueRounds} 輪）
           </p>
-          <div className="flex gap-2">
+          {classifyTopicForVote(meetingState.topic || currentTopic) === 'votable' && (
+            <p className="text-slate-300 font-mono text-xs">
+              議案「{(meetingState.topic || currentTopic).slice(0, 24)}」可就地投票定案
+            </p>
+          )}
+          <div className="flex gap-2 flex-wrap justify-center">
+            {classifyTopicForVote(meetingState.topic || currentTopic) === 'votable' && (
+              <button
+                onClick={() => {
+                  soundManager.playSelectSound();
+                  setIsVoteOpen(true);
+                }}
+                className="px-4 py-1.5 text-xs font-mono font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 border-2 border-amber-400 rounded transition"
+              >
+                🗳️ 就地投票定案
+              </button>
+            )}
             <button
               onClick={() => {
                 setRoundsExhausted(false);
@@ -1123,6 +1278,29 @@ export const App: React.FC = () => {
         onClose={() => setIsResumeOpen(false)}
         onConfirm={handleResumeConfirm}
       />
+
+      {/* 投票表決：發起＋逐票收集 */}
+      <VoteModal
+        isOpen={isVoteOpen}
+        topic={meetingState.topic || currentTopic}
+        agents={agents}
+        llmConfig={llmConfig}
+        contextMessages={chatMessages}
+        hostName={findLeader(agents, currentTeam)?.name || '主席'}
+        onStart={handleVoteStart}
+        onAbort={handleVoteAbort}
+        onComplete={handleVoteComplete}
+        onClose={handleVoteClose}
+      />
+
+      {/* 表決結果：定案結論＋計票＋主席裁決 */}
+      {isVoteResultOpen && voteSession && (
+        <VoteResult
+          session={voteSession}
+          onRuling={handleVoteRuling}
+          onClose={() => setIsVoteResultOpen(false)}
+        />
+      )}
 
 
     </div>

@@ -13,13 +13,16 @@ import {
   Coffee,
   AlertTriangle,
   History,
-  FolderOpen
+  FolderOpen,
+  Vote
 } from 'lucide-react';
 
 interface ControlPanelProps {
   onCallMeeting: (topic: string) => void;
   onDispatchTask: (task: string) => void;
   onTriggerRandomEvent: () => void;
+  onStartVote: () => void;
+  canVote: boolean;
   onToggleChatLog: () => void;
   onLoadHistory: () => void;
   onResetSetup: () => void;
@@ -37,6 +40,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   onCallMeeting,
   onDispatchTask,
   onTriggerRandomEvent,
+  onStartVote,
+  canVote,
   onToggleChatLog,
   onLoadHistory,
   onResetSetup,
@@ -150,6 +155,20 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               >
                 <Users className="w-3.5 h-3.5" />
                 開會
+              </button>
+
+              {/* Start Vote Button */}
+              <button
+                onClick={() => {
+                  soundManager.playSelectSound();
+                  onStartVote();
+                }}
+                disabled={!canVote}
+                title={canVote ? '就當前主題發起投票表決' : '無成員或投票進行中時無法發起投票'}
+                className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/60 rounded text-amber-300 text-xs font-mono font-bold flex items-center gap-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Vote className="w-3.5 h-3.5" />
+                投票
               </button>
 
               {/* Broadcast Task Button */}

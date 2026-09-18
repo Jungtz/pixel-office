@@ -281,11 +281,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           : [];
         const voteOptions = validOptions.length > 0
           ? validOptions.join('\n')
-          : '- yes: 贊成\n- no: 反對\n- abstain: 棄權';
-        systemPrompt = `你正在參與辦公室投票。投票人：${voterName}（${voterRole}），請以該角色的專業與性格表態。\n議案：「${voteTopic}」\n模式：${voteMode}\n候選選項（id: 標籤）：\n${voteOptions}\n請只回傳 JSON，不要輸出引號外的任何文字：{"choice": "<選項id>", "reason": "<兩句內理由，繁體中文>"}\n若無法決定，choice 填 "abstain"。`;
+          : '- yes: 贊成議案原文並照案執行\n- no: 反對議案原文（維持現狀或僅部分執行）\n- abstain: 棄權';
+        systemPrompt = `你正在參與辦公室投票。投票人：${voterName}（${voterRole}），請以該角色的專業與性格表態。\n議案：「${voteTopic}」\n模式：${voteMode}\n候選選項（id: 標籤）：\n${voteOptions}\n【選項語義】二元表決時 yes=贊成議案原文主張並照案執行，no=反對議案原文主張（維持現狀或僅部分執行），不得將部分執行曲解為贊成全案。\n【一致性】必須與你在討論摘錄中的實際立場一致，不得為迎合多數翻轉立場；reason 必須引用討論中的具體共識或分歧（張數、條件、金額任選其一），禁止空話。\n請只回傳 JSON，不要輸出引號外的任何文字：{"choice": "<選項id>", "reason": "<兩句內理由，繁體中文>"}\n若無法決定，choice 填 "abstain"。`;
         messagesPayload = [
           { role: 'system', content: systemPrompt },
-          ...(Array.isArray(contextMessages) ? contextMessages.slice(-4).map((m: any) => ({
+          ...(Array.isArray(contextMessages) ? contextMessages.slice(-8).map((m: any) => ({
             role: 'user',
             content: `[${m.speakerName || 'unknown'}] ${typeof m.text === 'string' ? m.text.slice(0, 300) : ''}`
           })) : []),
@@ -295,7 +295,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         const hostName = typeof req.body.hostName === 'string' ? req.body.hostName.slice(0, 40) : '主持人';
         const tallyText = typeof req.body.tallyText === 'string' ? req.body.tallyText.slice(0, 1500) : '';
         const contextText = typeof req.body.contextText === 'string' ? req.body.contextText.slice(0, 2000) : '';
-        systemPrompt = `你是會議主持人${hostName}，請為議案「${voteTopic}」撰寫表決後摘要。\n表決結果：\n${tallyText}\n討論摘錄：\n${contextText}\n請只回傳 JSON，不要輸出引號外的任何文字，格式如下：{"process": "討論過程摘要，2到4點條列，繁體中文", "conclusion": "定案結論，繁體中文", "followups": ["建議深入討論的項目1", "項目2"]}\n其中 followups 為 1 到 3 個尚未解決、值得下輪深入的項目；若無則填空陣列。`;
+        systemPrompt = `你是會議主持人${hostName}，請為議案「${voteTopic}」撰寫表決後摘要。\n表決結果：\n${tallyText}\n討論摘錄：\n${contextText}\n【防漂移】conclusion 必須寫明執行內容（全出／減碼幾張／保留幾張＋條件），金額必須含單位（台股1張=1000股，先換算股數再算）；禁止把部分減碼超譯為全出，禁止把會計科目處置寫成操作定案。\n【一致性】followups 不得與 conclusion 矛盾（例如 conclusion 說全出，followup 又說評估保留部位就是違規）；無未決事項則填空陣列。\n請只回傳 JSON，不要輸出引號外的任何文字，格式如下：{"process": "討論過程摘要，2到4點條列，繁體中文", "conclusion": "定案結論，繁體中文", "followups": ["建議深入討論的項目1", "項目2"]}\n其中 followups 為 1 到 3 個尚未解決、值得下輪深入的項目；若無則填空陣列。`;
         messagesPayload = [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: '請寫出定案結論並回傳 JSON。' }
