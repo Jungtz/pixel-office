@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import { getSkills, runSkills } from './skillsLoader';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -280,7 +281,25 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         ? `【前情提要（接續歷史討論）】\n${historySummary.trim().slice(0, 2000)}\n請基於以上前情繼續討論，不要重複已達成的結論。\n\n`
         : '';
 
-      systemPrompt = `${basePrompt}\n\n${summaryBlock}${topicLine}${sceneBlock}\n\n【重要】你現在的名字是 ${speakerName}。你的發言必須緊扣當前討論主題，結構如下：先亮明你對主題的立場（贊成／反對／補充），再用你的專業提出具體理由（數據、案例或親身經驗），二到四句話，展現角色性格。若上一人的發言偏離主題，不要跟著歪樓，先把話題拉回主題再回應。若需點名請使用實際成員名稱（${memberNamesStr}），不要自己編造不存在的人名。你的回覆中絕對不要包含你自己的名字或任何前綴（例如「BOSS_1 (BOSS):」），直接輸出純對話內容，一律使用繁體中文。`;
+      // Skills 動態外掛：各 skill 依主題/body 決定是否注入情報區塊（股票、網頁摘要…）
+      // 新增 skill 只需在 skills/ 下加資料夾，server.ts 不用改
+      let skillBlocks = '';
+      let skillInstructions = '';
+      try {
+        const { outputs } = await runSkills(
+          { topic: typeof topic === 'string' ? topic : undefined, body: req.body },
+          await getSkills()
+        );
+        for (const o of outputs) {
+          skillBlocks += o.block + '\n\n';
+          if (o.instruction) skillInstructions += o.instruction;
+          console.log(`[Skill:${o.id}]: 已注入情報 (${o.block.length}字)`);
+        }
+      } catch (err) {
+        console.warn('[Skills] 外掛執行失敗，降級為無外掛模式:', (err as Error).message);
+      }
+
+      systemPrompt = `${basePrompt}\n\n${summaryBlock}${topicLine}${skillBlocks}${sceneBlock}\n\n【重要】你現在的名字是 ${speakerName}。你的發言必須緊扣當前討論主題，結構如下：先亮明你對主題的立場（贊成／反對／補充），再用你的專業提出具體理由（數據、案例或親身經驗），二到四句話，展現角色性格。若上一人的發言偏離主題，不要跟著歪樓，先把話題拉回主題再回應。若需點名請使用實際成員名稱（${memberNamesStr}），不要自己編造不存在的人名。你的回覆中絕對不要包含你自己的名字或任何前綴（例如「BOSS_1 (BOSS):」），直接輸出純對話內容，一律使用繁體中文。${skillInstructions}`;
       console.log(`[SceneCtx] : ${sceneData ? `已載入 (${sceneData.totalPeople}人, ${sceneData.time})` : '無場景資訊'}`);
       messagesPayload = [
         { role: 'system', content: systemPrompt },
