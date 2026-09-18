@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { RoleType } from '../game/types';
 import { ROLE_CONFIGS } from '../services/roles';
+import { getRolesByTeam } from '../services/roleLoader';
+import { TEAMS, DEFAULT_TEAM } from '../services/teams';
 import { soundManager } from '../services/sound';
 import { getProviderList, getProviderById, resolveModel, initModelConfig } from '../services/configService';
 import { Users, Sparkles, Play, ShieldAlert, Key, Cpu, Globe, History } from 'lucide-react';
 
 export interface RoleSetupConfig {
   counts: Record<string, number>;
+  team: string;
   useMockAI: boolean;
   apiKey?: string;
   provider: string;
@@ -33,6 +36,7 @@ const getShortCode = (roleId: string): string => roleId.slice(0, 2);
 
 const STORAGE_KEY_COUNTS = 'roundtable-setup-counts';
 const STORAGE_KEY_PROVIDER = 'roundtable-setup-provider';
+const STORAGE_KEY_TEAM = 'roundtable-setup-team';
 
 const buildDefaultCounts = (): Record<string, number> => {
   const counts: Record<string, number> = {};
@@ -58,8 +62,17 @@ const loadSavedProvider = (): string | null => {
   return null;
 };
 
+const loadSavedTeam = (): string => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_TEAM);
+    if (saved && TEAMS.some(t => t.id === saved)) return saved;
+  } catch { /* ignore */ }
+  return DEFAULT_TEAM;
+};
+
 export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart, onOpenResume }) => {
   const [counts, setCounts] = useState<Record<string, number>>(loadSavedCounts);
+  const [selectedTeam, setSelectedTeam] = useState<string>(loadSavedTeam);
 
   const providers = getProviderList();
   const [selectedProviderId, setSelectedProviderId] = useState<string>(() => loadSavedProvider() || '');
@@ -111,6 +124,14 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart, onOpenR
   }, [selectedProviderId]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_TEAM, selectedTeam);
+    } catch { /* ignore */ }
+  }, [selectedTeam]);
+
+  const teamRoleKeys = getRolesByTeam(ROLE_CONFIGS, selectedTeam);
+
+  useEffect(() => {
     const provDef = getProviderById(selectedProviderId);
     if (provDef) {
       setApiKey(provDef.apiKey);
@@ -129,6 +150,18 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart, onOpenR
       const nextVal = Math.max(0, Math.min(3, (prev[role] || 0) + delta));
       return { ...prev, [role]: nextVal };
     });
+  };
+
+  const handleSelectTeam = (teamId: string) => {
+    soundManager.playSelectSound();
+    setSelectedTeam(teamId);
+    // 扮演角色若不在新團隊內則清除，避免送出隱藏角色
+    setUserRole(prev => {
+      if (!prev) return prev;
+      const cfg = ROLE_CONFIGS[prev];
+      return cfg && cfg.teams.includes(teamId) ? prev : null;
+    });
+    setUserName('');
   };
 
   const handleSelectProvider = (provId: string) => {
@@ -152,13 +185,19 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart, onOpenR
     }
   };
 
-  const totalMembers = Object.values(counts).reduce((a, b) => a + b, 0);
+  const totalMembers = teamRoleKeys.reduce((sum, key) => sum + (counts[key] || 0), 0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     soundManager.playFanfareSound();
+    // 只送出當前團隊的角色人數，避免他團殘留數量混入開局
+    const teamCounts: Record<string, number> = {};
+    for (const key of teamRoleKeys) {
+      teamCounts[key] = counts[key] || 0;
+    }
     onStart({
-      counts,
+      counts: teamCounts,
+      team: selectedTeam,
       useMockAI: selectedProviderId === 'mock',
       provider: selectedProviderId,
       apiKey: userApiKey || apiKey,
@@ -241,10 +280,35 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart, onOpenR
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-            
+
+            {/* 團隊類型選擇頁籤 */}
+            <div className="grid grid-cols-3 gap-2">
+              {TEAMS.map(team => {
+                const isSelected = selectedTeam === team.id;
+                return (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => handleSelectTeam(team.id)}
+                    title={team.description}
+                    className={`py-2 px-2 text-sm font-mono rounded border transition flex flex-col items-center justify-center gap-0.5 text-center ${
+                      isSelected
+                        ? 'bg-amber-400 text-slate-950 font-bold border-amber-500 shadow-md'
+                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="font-bold">{team.label}團隊</span>
+                    <span className={`text-[10px] font-mono ${isSelected ? 'text-slate-900' : 'text-slate-500'}`}>
+                      {getRolesByTeam(ROLE_CONFIGS, team.id).length} 種角色
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* 角色數量選擇 Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1">
-              {(Object.keys(ROLE_CONFIGS) as string[]).map(roleKey => {
+              {teamRoleKeys.map(roleKey => {
                 const role = ROLE_CONFIGS[roleKey];
                 const count = counts[roleKey] || 0;
                 const isUserRole = userRole === roleKey;

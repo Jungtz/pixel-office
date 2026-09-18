@@ -5,6 +5,8 @@ import { AgentCharacter, ChatMessage, Position, RoleType, MeetingState } from '.
 import { fetchLLMResponse, LLMConfig } from './services/aiAgent';
 import { getProviderList, getProviderById, getGameLoopConfig } from './services/configService';
 import { ROLE_CONFIGS, ROLE_ALIASES } from './services/roles';
+import { getTeamLeaderRole, inferTeamFromRoles } from './services/teams';
+import { RANDOM_EVENT_POOLS } from './services/aiAgent';
 import { soundManager } from './services/sound';
 import { tickBehavior } from './game/behaviorEngine';
 import { triggerRandomEvent, clearPendingChain } from './game/events';
@@ -45,6 +47,14 @@ export const App: React.FC = () => {
 
   const [currentTopic, setCurrentTopic] = useState<string>('Q3 核心新功能上線與系統架構優化');
 
+  const [currentTeam, setCurrentTeam] = useState<string>('it');
+  /** 開場／主持人：BOSS 優先，否則該團 leader 角色（資訊 PM／財金 CFO／法務 COU） */
+  const findLeader = (list: AgentCharacter[], team: string): AgentCharacter | undefined => {
+    const leaderRole = getTeamLeaderRole(team);
+    return list.find(a => a.role === 'BOSS')
+      || (leaderRole ? list.find(a => a.role === leaderRole) : undefined)
+      || list[0];
+  };
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     provider: 'mock'
   });
@@ -130,13 +140,14 @@ export const App: React.FC = () => {
       sdk: config.sdk
     });
 
+    setCurrentTeam(config.team || 'it');
     setPendingConfig(config);
     setIsSetupOpen(false);
     setIsTopicOpen(true);
   };
 
   // 2. 第二階段：確認 Topic 主題，生成 Agents 並啟動冒險
-  const handleConfirmTopic = (selectedTopic: string) => {
+  const handleConfirmTopic = (selectedTopic: string, stockId?: string) => {
     if (!pendingConfig) return;
     setCurrentTopic(selectedTopic);
 
@@ -225,9 +236,9 @@ export const App: React.FC = () => {
     inGameTimeRef.current = 9;
     clearPendingChain();
 
-    // 遊戲啟動宣告開場主題 (由 Boss 或 PM 進行開場引言)
+    // 遊戲啟動宣告開場主題 (由 Boss 或該團主持人進行開場引言)
     setTimeout(() => {
-      const leader = newAgents.find(a => a.role === 'BOSS') || newAgents.find(a => a.role === 'PM') || newAgents[0];
+      const leader = findLeader(newAgents, pendingConfig.team || 'it');
       if (leader) {
         triggerAgentSpeech(leader, selectedTopic);
       }
@@ -275,8 +286,9 @@ export const App: React.FC = () => {
     setHistorySummary(session.summary || '');
     setCurrentTopic(session.topic);
 
-    // 3. 依歷史發言者重建陣容（接續後全員由 AI 驅動）
+    // 3. 依歷史發言者重建陣容（接續後全員由 AI 驅動），並依角色推斷團隊
     const speakers = distinctSpeakers(session.messages);
+    setCurrentTeam(inferTeamFromRoles(speakers.map(s => s.role)));
     const now = Date.now();
     let deskIdx = 0;
     const newAgents: AgentCharacter[] = speakers.map((s, idx) => {
@@ -774,9 +786,9 @@ export const App: React.FC = () => {
 
     // 發起會議初始發言
     setTimeout(async () => {
-      const pmOrBoss = agents.find(a => a.role === 'PM' || a.role === 'BOSS') || agents[0];
-      if (pmOrBoss) {
-        await triggerAgentSpeech(pmOrBoss, topic);
+      const host = findLeader(agents, currentTeam);
+      if (host) {
+        await triggerAgentSpeech(host, topic);
       }
     }, 1500);
   };
@@ -785,21 +797,17 @@ export const App: React.FC = () => {
   const handleDispatchTask = async (task: string) => {
     soundManager.playFanfareSound();
     setCurrentTopic(task);
-    const pm = agents.find(a => a.role === 'PM') || agents[0];
-    if (pm) {
-      await triggerAgentSpeech(pm, task);
+    const host = findLeader(agents, currentTeam);
+    if (host) {
+      await triggerAgentSpeech(host, task);
     }
   };
 
 
   // 6. 隨機爆發事件 (Random Incident)
   const handleTriggerRandomEvent = () => {
-    const events = [
-      '客戶在體驗測試環境時，發現 Button 連點會畫面白屏！',
-      '金流 API 突然回傳 500 錯誤，訂單大量被掛起！',
-      '發現某個第三方套件爆出零日漏洞，全體手動緊急 hotfix！'
-    ];
-    const eventTopic = events[Math.floor(Math.random() * events.length)];
+    const pool = RANDOM_EVENT_POOLS[currentTeam] || RANDOM_EVENT_POOLS.it;
+    const eventTopic = pool[Math.floor(Math.random() * pool.length)];
     handleDispatchTask(eventTopic);
   };
 
@@ -851,13 +859,14 @@ export const App: React.FC = () => {
     const recentSpeakerIds = chatMessages.slice(-3).map(m => m.speakerId);
     const topicLower = topic.toLowerCase();
 
-    // 收尾階段：優先由 PM／BOSS 主持收斂，避免結論發散
+    // 收尾階段：優先由該團主持人（BOSS／PM／CFO／COU）收斂，避免結論發散
     const loopCfg = getGameLoopConfig();
     const maxRounds = loopCfg.maxDialogueRounds ?? 0;
     const remaining = maxRounds > 0 ? maxRounds - dialogueRoundCount.current : -1;
     if (remaining > 0 && remaining <= 2) {
+      const leaderRole = getTeamLeaderRole(currentTeam);
       const host = otherAgents.find(a =>
-        (a.role === 'PM' || a.role === 'BOSS') && !recentSpeakerIds.includes(a.id)
+        (a.role === 'BOSS' || (leaderRole && a.role === leaderRole)) && !recentSpeakerIds.includes(a.id)
       );
       if (host) return host;
     }
@@ -1079,6 +1088,7 @@ export const App: React.FC = () => {
       <TopicModal
         isOpen={isTopicOpen}
         llmConfig={llmConfig}
+        team={currentTeam}
         onConfirmTopic={handleConfirmTopic}
         onBack={() => {
           setIsTopicOpen(false);

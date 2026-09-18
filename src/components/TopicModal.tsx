@@ -6,13 +6,15 @@ import { Sparkles, Dices, ArrowRight, ArrowLeft, Lightbulb } from 'lucide-react'
 interface TopicModalProps {
   isOpen: boolean;
   llmConfig: LLMConfig;
-  onConfirmTopic: (topic: string) => void;
+  team?: string;
+  onConfirmTopic: (topic: string, stockId?: string) => void;
   onBack: () => void;
 }
 
 export const TopicModal: React.FC<TopicModalProps> = ({
   isOpen,
   llmConfig,
+  team,
   onConfirmTopic,
   onBack
 }) => {
@@ -21,9 +23,9 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   const [isRolling, setIsRolling] = useState<boolean>(false);
 
   useEffect(() => {
-    // 手動模式：開啟時僅預填本地範例，不自動呼叫 AI，等待使用者按骰子或自行輸入
+    // 手動模式：開啟時僅預填本地範例（依團隊取主題池），不自動呼叫 AI，等待使用者按骰子或自行輸入
     if (isOpen && !topic) {
-      setTopic(generateMockTopic());
+      setTopic(generateMockTopic(team));
     }
   }, [isOpen]);
 
@@ -54,7 +56,8 @@ export const TopicModal: React.FC<TopicModalProps> = ({
               providerId: llmConfig.provider,
               apiKey: llmConfig.apiKey,
               speakerRole: 'TOPIC',
-              speakerName: 'TopicGenerator'
+              speakerName: 'TopicGenerator',
+              team: team || 'it'
             }),
             signal: controller.signal
           });
@@ -79,8 +82,8 @@ export const TopicModal: React.FC<TopicModalProps> = ({
       console.warn('[Client Topic Generator Error] AI Topic generation failed, fallback to mock generator:', err);
     }
 
-    // 隨機動態主題產生器
-    const mockTopic = generateMockTopic();
+    // 隨機動態主題產生器（依團隊取主題池）
+    const mockTopic = generateMockTopic(team);
     console.log(`[Client Topic Generator] Mock Topic Selected: "${mockTopic}"`);
     setTopic(mockTopic);
     setIsGenerating(false);

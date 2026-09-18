@@ -227,7 +227,7 @@ app.post('/api/test-key', async (req: Request, res: Response) => {
  */
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
-    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData, model: requestedModel, apiKey: frontendApiKey, historySummary } = req.body;
+    const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData, model: requestedModel, apiKey: frontendApiKey, historySummary, team } = req.body;
     const config = loadConfig();
     const provider = config.providers?.[providerId];
     const activeModel = requestedModel || provider?.defaultModel || '';
@@ -244,7 +244,17 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     let messagesPayload: any[] = [];
 
     if (isTopicGen) {
-      systemPrompt = '你是一名資深的科技公司 CEO。請以繁體中文直接輸出一個 15 字以內的辦公室專案討論主題或緊急任務（例如：客戶極端效能瓶頸處置、準備週五產線 Build 發佈）。直接輸出主題即可，絕不要輸出引號、問候語或任何額外說明。';
+      const topicIdentity: Record<string, string> = {
+        finance: '資深的金控財務長',
+        legal: '資深的企業法務長'
+      };
+      const identity = topicIdentity[typeof team === 'string' ? team : ''] || '資深的科技公司 CEO';
+      const topicExamples: Record<string, string> = {
+        finance: '（例如：Q3 財報結算與預算重編、金檢缺失限期改善、股東會議案攻防）',
+        legal: '（例如：重大合約違約求償談判、新產品智財布局、主管機關裁罰救濟）'
+      };
+      const examples = topicExamples[typeof team === 'string' ? team : ''] || '（例如：客戶極端效能瓶頸處置、準備週五產線 Build 發佈）';
+      systemPrompt = `你是一名${identity}。請以繁體中文直接輸出一個 15 字以內的辦公室專案討論主題或緊急任務${examples}。直接輸出主題即可，絕不要輸出引號、問候語或任何額外說明。`;
       messagesPayload = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: '請發想並輸出一個全新的辦公室專案討論主題。' }
