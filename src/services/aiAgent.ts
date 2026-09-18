@@ -323,7 +323,8 @@ export async function fetchLLMResponse(
   contextMessages: ChatMessage[],
   topic?: string,
   sceneData?: { time: string; totalPeople: number; members: string; topic?: string },
-  historySummary?: string
+  historySummary?: string,
+  stockId?: string
 ): Promise<string> {
   if (config.provider === 'mock') {
     return generateMockResponse(
@@ -354,7 +355,8 @@ export async function fetchLLMResponse(
           contextMessages,
           topic,
           sceneData,
-          historySummary
+          historySummary,
+          stockId
         }),
         signal: controller.signal
       });

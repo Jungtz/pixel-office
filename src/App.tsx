@@ -6,6 +6,7 @@ import { fetchLLMResponse, LLMConfig } from './services/aiAgent';
 import { getProviderList, getProviderById, getGameLoopConfig } from './services/configService';
 import { ROLE_CONFIGS, ROLE_ALIASES } from './services/roles';
 import { getTeamLeaderRole, inferTeamFromRoles } from './services/teams';
+import { detectStockId } from './services/stockId';
 import { RANDOM_EVENT_POOLS } from './services/aiAgent';
 import { soundManager } from './services/sound';
 import { tickBehavior } from './game/behaviorEngine';
@@ -48,6 +49,9 @@ export const App: React.FC = () => {
   const [currentTopic, setCurrentTopic] = useState<string>('Q3 核心新功能上線與系統架構優化');
 
   const [currentTeam, setCurrentTeam] = useState<string>('it');
+
+  const stockIdRef = useRef<string | null>(null);
+
   /** 開場／主持人：BOSS 優先，否則該團 leader 角色（資訊 PM／財金 CFO／法務 COU） */
   const findLeader = (list: AgentCharacter[], team: string): AgentCharacter | undefined => {
     const leaderRole = getTeamLeaderRole(team);
@@ -55,6 +59,7 @@ export const App: React.FC = () => {
       || (leaderRole ? list.find(a => a.role === leaderRole) : undefined)
       || list[0];
   };
+
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({
     provider: 'mock'
   });
@@ -150,6 +155,7 @@ export const App: React.FC = () => {
   const handleConfirmTopic = (selectedTopic: string, stockId?: string) => {
     if (!pendingConfig) return;
     setCurrentTopic(selectedTopic);
+    stockIdRef.current = stockId || null;
 
     // 新冒險 = 新 log session（檔名時間戳），清掉接續狀態
     const now = new Date();
@@ -285,6 +291,9 @@ export const App: React.FC = () => {
     historySummaryRef.current = session.summary || '';
     setHistorySummary(session.summary || '');
     setCurrentTopic(session.topic);
+    // 接續歷史：從主題自動偵測股票代號（後端無代號時也會自行偵測，此處為前端顯示一致性）
+    const resumedStock = detectStockId(session.topic);
+    stockIdRef.current = resumedStock;
 
     // 3. 依歷史發言者重建陣容（接續後全員由 AI 驅動），並依角色推斷團隊
     const speakers = distinctSpeakers(session.messages);
@@ -570,7 +579,8 @@ export const App: React.FC = () => {
         contextOverride ?? chatMessages,
         topic,
         buildSceneData(topic, agentsOverride),
-        historySummaryRef.current || undefined
+        historySummaryRef.current || undefined,
+        stockIdRef.current || undefined
       );
       dialogueRoundCount.current++;
 
@@ -932,6 +942,7 @@ export const App: React.FC = () => {
               sessionFileRef.current = null;
               historySummaryRef.current = '';
               setHistorySummary('');
+              stockIdRef.current = null;
               if (meetingState.isActive) {
                 setMeetingState({ isActive: false, topic: '', participants: [], log: [], startTime: 0 });
               }

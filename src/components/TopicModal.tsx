@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LLMConfig, generateMockTopic } from '../services/aiAgent';
+import { detectStockId as detectStockIdLocal } from '../services/stockId';
 import { soundManager } from '../services/sound';
 import { Sparkles, Dices, ArrowRight, ArrowLeft, Lightbulb } from 'lucide-react';
 
@@ -19,8 +20,14 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   onBack
 }) => {
   const [topic, setTopic] = useState<string>('');
+  const [stockId, setStockId] = useState<string>('');
+  const [stockTouched, setStockTouched] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isRolling, setIsRolling] = useState<boolean>(false);
+
+  // 主題含 4 碼代號時自動帶入（使用者手動改過則不再覆寫）
+  const autoDetected = detectStockIdLocal(topic);
+  const effectiveStockId = (stockTouched ? stockId : (stockId || autoDetected || '')).toUpperCase();
 
   useEffect(() => {
     // 手動模式：開啟時僅預填本地範例（依團隊取主題池），不自動呼叫 AI，等待使用者按骰子或自行輸入
@@ -94,7 +101,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
     e.preventDefault();
     if (!topic.trim()) return;
     soundManager.playFanfareSound();
-    onConfirmTopic(topic.trim());
+    onConfirmTopic(topic.trim(), effectiveStockId || undefined);
   };
 
   return (
@@ -172,6 +179,26 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                   <span>AI 正在生成冒險主題，請稍候…</span>
                 </div>
               )}
+            </div>
+
+            {/* 股票代號（選填）：指定後開局自動注入即時行情＋viewer 分析報告 */}
+            <div className="bg-slate-900/90 border border-slate-800 p-4 rounded flex flex-col gap-2">
+              <label className="text-xs font-mono font-bold text-amber-400 flex items-center justify-between">
+                <span>📈 股票代號（選填）：</span>
+                {effectiveStockId && (
+                  <span className="text-[10px] text-emerald-400 font-normal font-mono">
+                    將注入 {effectiveStockId} 即時情報
+                  </span>
+                )}
+              </label>
+              <input
+                type="text"
+                value={stockTouched ? stockId : (stockId || autoDetected || '')}
+                onChange={e => { setStockId(e.target.value.trim().toUpperCase()); setStockTouched(true); }}
+                placeholder="如 2330（主題含代號會自動帶入）"
+                maxLength={6}
+                className="w-40 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded px-3 py-2 text-sm font-mono text-amber-300 focus:outline-none transition shadow-inner"
+              />
             </div>
 
             {/* Footer Navigation Buttons */}
