@@ -172,10 +172,11 @@ export const App: React.FC = () => {
   };
 
   // 2. 第二階段：確認 Topic 主題，生成 Agents 並啟動冒險
-  const handleConfirmTopic = (selectedTopic: string, stockId?: string) => {
+  const handleConfirmTopic = (selectedTopic: string) => {
     if (!pendingConfig) return;
     setCurrentTopic(selectedTopic);
-    stockIdRef.current = stockId || null;
+    // 主題隱含股票代號：含 4 碼代號時自動注入即時行情（後端無代號時也會自行偵測）
+    stockIdRef.current = detectStockId(selectedTopic);
 
     // 新冒險 = 新 log session（檔名時間戳），清掉接續狀態
     const now = new Date();
