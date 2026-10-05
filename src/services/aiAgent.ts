@@ -1,5 +1,6 @@
 import { ROLE_CONFIGS } from './roles';
 import { AgentCharacter, ChatMessage, RoleType } from '../game/types';
+import { apiPath } from './apiBase';
 
 export interface LLMConfig {
   provider: string;
@@ -341,7 +342,7 @@ export async function fetchLLMResponse(
     const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch(apiPath('/api/chat'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

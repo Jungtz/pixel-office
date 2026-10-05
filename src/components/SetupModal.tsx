@@ -5,6 +5,7 @@ import { getRolesByTeam } from '../services/roleLoader';
 import { TEAMS, DEFAULT_TEAM } from '../services/teams';
 import { soundManager } from '../services/sound';
 import { getProviderList, getProviderById, resolveModel, initModelConfig } from '../services/configService';
+import { apiPath } from '../services/apiBase';
 import { Users, Sparkles, Play, ShieldAlert, Key, Cpu, Globe, History } from 'lucide-react';
 
 export interface RoleSetupConfig {
@@ -215,7 +216,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ isOpen, onStart, onOpenR
     setKeyTestResult('idle');
     setKeyTestError('');
     try {
-      const res = await fetch('/api/test-key', {
+      const res = await fetch(apiPath('/api/test-key'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ providerId: selectedProviderId, apiKey: userApiKey })

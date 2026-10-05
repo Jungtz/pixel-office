@@ -25,6 +25,7 @@ import { VoteResult } from './components/VoteResult';
 import { classifyTopicForVote } from './services/topicType';
 import { voteChoiceLabel } from './services/voteService';
 import { backupChatLog, distinctSpeakers, parseStamp, type ResumedSession } from './services/chatLogService';
+import { apiPath } from './services/apiBase';
 
 export const App: React.FC = () => {
   const [map] = useState(() => createDefaultMap());
@@ -144,7 +145,7 @@ export const App: React.FC = () => {
     };
 
     const timer = setTimeout(() => {
-      fetch('/api/chat-log', {
+      fetch(apiPath('/api/chat-log'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

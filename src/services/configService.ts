@@ -1,4 +1,5 @@
 import rawConfig from '../../config.json';
+import { apiPath } from './apiBase';
 
 export interface ProviderDefinition {
   id: string;
@@ -46,7 +47,7 @@ export async function initModelConfig(options?: { retry?: boolean }): Promise<Mo
   const maxAttempts = options?.retry ? 20 : 1;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const res = await fetch('/api/model-config');
+      const res = await fetch(apiPath('/api/model-config'));
       if (res.ok) {
         const data = await res.json();
         cachedModelConfig = {

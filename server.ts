@@ -9,8 +9,22 @@ import { sanitizeVotes, formatVotesSection, parseVotesData, parseSummarySection 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+/**
+ * 反代子路徑（參考 news-gateway BASE_PATH）：
+ * 空字串或 `/` 視為根路徑；其餘正規化為 `/xxx`（無尾斜線）。
+ * `/api/*` 永遠保留，子路徑模式額外掛載 `{basePath}/api/*`，兩者皆可用。
+ */
+function getBasePath(): string {
+  const raw = (process.env.BASE_PATH || '').trim();
+  if (!raw || raw === '/') return '';
+  return (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/+$/, '');
+}
+const BASE_PATH = getBasePath();
+
 app.use(cors());
 app.use(express.json());
+
+const apiRouter = express.Router();
 
 interface ProviderConfig {
   type?: string;
@@ -111,7 +125,7 @@ function loadScenePrompt(data: SceneData): string {
 /**
  * GET /api/providers - 提供前端可選的 AI Provider 列表
  */
-app.get('/api/providers', (req: Request, res: Response) => {
+apiRouter.get('/providers', (req: Request, res: Response) => {
   const config = loadConfig();
   const list = [
     {
@@ -139,7 +153,7 @@ app.get('/api/providers', (req: Request, res: Response) => {
 /**
  * GET /api/model-config — 回傳 models 設定（不洩漏 apiKey）
  */
-app.get('/api/model-config', (req: Request, res: Response) => {
+apiRouter.get('/model-config', (req: Request, res: Response) => {
   const config = loadConfig();
   const modelsConfig = config.models;
   const modelConfig = modelsConfig?.model;
@@ -171,7 +185,7 @@ app.get('/api/model-config', (req: Request, res: Response) => {
 /**
  * POST /api/test-key — 驗證使用者輸入的 API Key 是否有效
  */
-app.post('/api/test-key', async (req: Request, res: Response) => {
+apiRouter.post('/test-key', async (req: Request, res: Response) => {
   try {
     const { providerId, apiKey: frontendApiKey } = req.body;
     if (!providerId || !frontendApiKey) {
@@ -228,7 +242,7 @@ app.post('/api/test-key', async (req: Request, res: Response) => {
 /**
  * POST /api/chat - 由後端伺服器進行 LLM API 呼叫 (支援角色發言與 🎲 AI 主題自動發想)
  */
-app.post('/api/chat', async (req: Request, res: Response) => {
+apiRouter.post('/chat', async (req: Request, res: Response) => {
   try {
     const { providerId, speakerRole, speakerName, contextMessages, topic, sceneData, model: requestedModel, apiKey: frontendApiKey, historySummary, team } = req.body;
     const config = loadConfig();
@@ -503,7 +517,7 @@ function sanitizeFilename(topic: string): string {
  * 接續歷史時傳 resumeFrom（舊檔名）：先由前端呼叫 /api/chat-logs/backup 備份，
  * 後端直接複寫同一檔並寫入前情提要區塊。
  */
-app.post('/api/chat-log', (req: Request, res: Response) => {
+apiRouter.post('/chat-log', (req: Request, res: Response) => {
   try {
     const { sessionId, topic, startedAt, messages, resumeFrom, historySummary, votes } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -586,7 +600,7 @@ function isSafeChatLogFilename(name: unknown): name is string {
 /**
  * GET /api/chat-logs - 列出 chat-logs/*.md（不含 backup/），供接續討論挑檔
  */
-app.get('/api/chat-logs', (req: Request, res: Response) => {
+apiRouter.get('/chat-logs', (req: Request, res: Response) => {
   try {
     const dir = path.join(process.cwd(), 'chat-logs');
     if (!fs.existsSync(dir)) return res.json({ status: 'ok', logs: [] });
@@ -619,7 +633,7 @@ app.get('/api/chat-logs', (req: Request, res: Response) => {
 /**
  * GET /api/chat-log?file=xxx - 讀取單一歷史檔並解析訊息，供接續討論還原
  */
-app.get('/api/chat-log', (req: Request, res: Response) => {
+apiRouter.get('/chat-log', (req: Request, res: Response) => {
   try {
     const file = req.query.file;
     if (!isSafeChatLogFilename(file)) {
@@ -655,7 +669,7 @@ app.get('/api/chat-log', (req: Request, res: Response) => {
 /**
  * POST /api/chat-logs/backup - 接續前先備份舊檔到 chat-logs/backup/（一次一個備份）
  */
-app.post('/api/chat-logs/backup', (req: Request, res: Response) => {
+apiRouter.post('/chat-logs/backup', (req: Request, res: Response) => {
   try {
     const { file } = req.body || {};
     if (!isSafeChatLogFilename(file)) {
@@ -679,7 +693,7 @@ app.post('/api/chat-logs/backup', (req: Request, res: Response) => {
 /**
  * POST /api/chat-logs/summary - 把歷史訊息濃縮成前情提要（接續時注入 LLM）
  */
-app.post('/api/chat-logs/summary', async (req: Request, res: Response) => {
+apiRouter.post('/chat-logs/summary', async (req: Request, res: Response) => {
   try {
     const { providerId, model: requestedModel, apiKey: frontendApiKey, topic, messages } = req.body || {};
     const list: { speakerName?: string; text?: string }[] = Array.isArray(messages) ? messages.slice(-100) : [];
@@ -746,6 +760,27 @@ app.post('/api/chat-logs/summary', async (req: Request, res: Response) => {
   }
 });
 
+// ---- Mount：根 `/api` 永遠保留，子路徑模式額外掛載 `{BASE_PATH}/api`（參照 news-gateway 作法） ----
+app.use('/api', apiRouter);
+if (BASE_PATH) {
+  app.use(`${BASE_PATH}/api`, apiRouter);
+}
+
+const healthHandler = (req: Request, res: Response) => {
+  res.json({ ok: true, basePath: BASE_PATH || '/' });
+};
+app.get('/health', healthHandler);
+if (BASE_PATH) {
+  app.get(`${BASE_PATH}/health`, healthHandler);
+}
+
+// ---- 正式建置靜態服務（`npm run build` 產物 dist/；不存在則略過，開發時由 Vite 接管） ----
+const distPath = path.join(process.cwd(), 'dist');
+if (fs.existsSync(distPath)) {
+  if (BASE_PATH) app.use(BASE_PATH, express.static(distPath));
+  app.use(express.static(distPath));
+}
+
 app.listen(PORT, () => {
-  console.log(`🚀 PixelOffice Backend Server listening on http://localhost:${PORT}`);
+  console.log(`🚀 PixelOffice Backend Server listening on http://localhost:${PORT}${BASE_PATH || ''} (BASE_PATH=${BASE_PATH || '(root)'})`);
 });

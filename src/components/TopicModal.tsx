@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LLMConfig, generateMockTopic } from '../services/aiAgent';
 import { detectStockId as detectStockIdLocal } from '../services/stockId';
 import { soundManager } from '../services/sound';
+import { apiPath } from '../services/apiBase';
 import { Sparkles, Dices, ArrowRight, ArrowLeft, Lightbulb } from 'lucide-react';
 
 interface TopicModalProps {
@@ -56,7 +57,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
         const timeoutId = setTimeout(() => controller.abort(), 125000);
 
         try {
-          const res = await fetch('/api/chat', {
+          const res = await fetch(apiPath('/api/chat'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

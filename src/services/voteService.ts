@@ -1,4 +1,5 @@
 import type { LLMConfig } from './aiAgent';
+import { apiPath } from './apiBase';
 import { ROLE_CONFIGS } from './roles';
 import type {
   AgentCharacter,
@@ -31,7 +32,7 @@ async function postStructuredVote(body: Record<string, unknown>): Promise<string
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), VOTE_TIMEOUT_MS);
   try {
-    const res = await fetch('/api/chat', {
+    const res = await fetch(apiPath('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

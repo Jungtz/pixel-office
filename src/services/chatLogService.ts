@@ -1,5 +1,6 @@
 import type { LLMConfig } from './aiAgent';
 import type { VoteSession } from '../game/types';
+import { apiPath } from './apiBase';
 
 export interface ChatLogMessage {
   timestamp: string;
@@ -90,7 +91,7 @@ async function readJson(res: Response): Promise<any> {
  * 列出可接續的歷史紀錄（依最後更新倒序）
  */
 export async function fetchChatLogList(): Promise<ChatLogMeta[]> {
-  const res = await fetch('/api/chat-logs');
+  const res = await fetch(apiPath('/api/chat-logs'));
   const data = await readJson(res);
   if (data.status === 'ok' && Array.isArray(data.logs)) {
     return data.logs as ChatLogMeta[];
@@ -103,7 +104,7 @@ export async function fetchChatLogList(): Promise<ChatLogMeta[]> {
  */
 export async function fetchChatLogDetail(file: string): Promise<ChatLogDetail> {
   if (!file) throw new Error('檔名不合法');
-  const res = await fetch(`/api/chat-log?file=${encodeURIComponent(file)}`);
+  const res = await fetch(apiPath(`/api/chat-log?file=${encodeURIComponent(file)}`));
   const data = await readJson(res);
   if (data.status === 'ok' && Array.isArray(data.messages)) {
     return {
@@ -122,7 +123,7 @@ export async function fetchChatLogDetail(file: string): Promise<ChatLogDetail> {
  * 接續前備份舊檔（後端複製到 chat-logs/backup/），回傳備份檔名
  */
 export async function backupChatLog(file: string): Promise<string | null> {
-  const res = await fetch('/api/chat-logs/backup', {
+  const res = await fetch(apiPath('/api/chat-logs/backup'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ file })
@@ -141,7 +142,7 @@ export async function summarizeChatLog(
   topic: string,
   messages: ChatLogMessage[]
 ): Promise<{ summary: string; mocked: boolean }> {
-  const res = await fetch('/api/chat-logs/summary', {
+  const res = await fetch(apiPath('/api/chat-logs/summary'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
