@@ -14,6 +14,7 @@ import { triggerRandomEvent, clearPendingChain } from './game/events';
 import { generatePersonality } from './game/personality';
 
 import { OfficeCanvas } from './components/OfficeCanvas';
+import { OfficeCanvas3D } from './components/OfficeCanvas3D';
 import { ControlPanel } from './components/ControlPanel';
 import { DialogueBox } from './components/DialogueBox';
 import { SetupModal, RoleSetupConfig, ResumeLlmConfig } from './components/SetupModal';
@@ -29,6 +30,7 @@ import { apiPath } from './services/apiBase';
 
 export const App: React.FC = () => {
   const [map] = useState(() => createDefaultMap());
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
   const [agents, setAgents] = useState<AgentCharacter[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -1102,7 +1104,7 @@ export const App: React.FC = () => {
         chatMessagesCount={chatMessages.length}
       />
 
-      {/* 2D Canvas 遊戲主畫面 */}
+      {/* 2D / 3D 遊戲主畫面 */}
       <div
         className="flex-1 w-full relative"
         style={{
@@ -1110,13 +1112,45 @@ export const App: React.FC = () => {
           transition: 'padding-bottom 0.25s ease'
         }}
       >
-        <OfficeCanvas
-          map={map}
-          agents={agents}
-          selectedAgentId={selectedAgentId}
-          activeDialogue={activeDialogue}
-          onSelectAgent={agent => setSelectedAgentId(agent.id)}
-        />
+        <div className="absolute top-16 right-3 z-20 flex gap-1">
+          <button
+            onClick={() => setViewMode('2d')}
+            className={`px-2.5 py-1 text-[11px] font-mono font-bold rounded border transition ${
+              viewMode === '2d'
+                ? 'bg-amber-400 text-slate-950 border-amber-400'
+                : 'bg-slate-900/90 text-slate-300 border-slate-700 hover:border-amber-400/60'
+            }`}
+          >
+            2D
+          </button>
+          <button
+            onClick={() => setViewMode('3d')}
+            className={`px-2.5 py-1 text-[11px] font-mono font-bold rounded border transition ${
+              viewMode === '3d'
+                ? 'bg-amber-400 text-slate-950 border-amber-400'
+                : 'bg-slate-900/90 text-slate-300 border-slate-700 hover:border-amber-400/60'
+            }`}
+          >
+            3D
+          </button>
+        </div>
+        {viewMode === '3d' ? (
+          <OfficeCanvas3D
+            map={map}
+            agents={agents}
+            selectedAgentId={selectedAgentId}
+            activeDialogue={activeDialogue}
+            onSelectAgent={agent => setSelectedAgentId(agent.id)}
+          />
+        ) : (
+          <OfficeCanvas
+            map={map}
+            agents={agents}
+            selectedAgentId={selectedAgentId}
+            activeDialogue={activeDialogue}
+            onSelectAgent={agent => setSelectedAgentId(agent.id)}
+          />
+        )}
       </div>
 
       {/* 勇者鬥惡龍 經典打字機對話框 */}
